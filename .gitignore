@@ -1,0 +1,4 @@
+# Project exclude paths
+/scheduler/build/
+/testing/build/
+/testing/build/classes/java/test/
