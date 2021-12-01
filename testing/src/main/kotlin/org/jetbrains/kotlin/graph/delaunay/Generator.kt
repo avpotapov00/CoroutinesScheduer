@@ -25,7 +25,6 @@ fun generatePoints(amount: Int, maxX: Double, maxY: Double, fileName: String){
     }
 
     File(fileName).bufferedWriter().use {  writer ->
-        writer.write("$maxX $maxY\n")
         points.forEach { point ->
             writer.write("${point.x} ${point.y}\n")
         }

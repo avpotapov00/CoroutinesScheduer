@@ -21,7 +21,7 @@ class ExperimentalPriorityCoroutineScheduler(
     @Volatile
     private var terminated = false
 
-    private var threads: List<Worker> = (0 until poolSize).map { index -> Worker(index) }
+    var threads: List<Worker> = (0 until poolSize).map { index -> Worker(index) }
 
     private val stealingMultiQueue = StealingMultiQueue<PriorityTaskWrapper>(stealSize, pSteal, poolSize)
 
