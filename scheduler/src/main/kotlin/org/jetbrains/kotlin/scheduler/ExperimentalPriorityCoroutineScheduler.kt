@@ -18,15 +18,27 @@ class ExperimentalPriorityCoroutineScheduler(
     startThreads: Boolean = true
 ) : PriorityCoroutineScheduler {
 
+    /**
+     * End of work flag
+     */
     @Volatile
     private var terminated = false
 
+    /**
+     * Threads serving the scheduler
+     */
     var threads: List<Worker> = (0 until poolSize).map { index -> Worker(index) }
 
     private val stealingMultiQueue = StealingMultiQueue<PriorityTaskWrapper>(stealSize, pSteal, poolSize)
 
+    /**
+     * Buffer for the freshest sleeping stream
+     */
     private val sleepingBox: AtomicRef<Worker?> = atomic(null)
 
+    /**
+     * Array where sleeping threads are stored
+     */
     private val sleepingArray: AtomicArray<Worker?> = atomicArrayOfNulls(poolSize * 2)
 
     private val random = Random(0)
@@ -61,6 +73,7 @@ class ExperimentalPriorityCoroutineScheduler(
     private fun tryWakeThread() {
         var recentWorker = sleepingBox.value
 
+        // if found a thread in sleeping box, trying to get it, or go further, if someone has taken it earlier
         while (recentWorker != null) {
             if (sleepingBox.compareAndSet(recentWorker, null)) {
                 LockSupport.unpark(recentWorker)
@@ -69,6 +82,7 @@ class ExperimentalPriorityCoroutineScheduler(
             recentWorker = sleepingBox.value
         }
 
+        // Try to get a thread from the array several times
         for (i in 0 until WAKE_RETRY_COUNT) {
             val index = random.nextInt(0, sleepingArray.size)
             recentWorker = sleepingArray[index].value
