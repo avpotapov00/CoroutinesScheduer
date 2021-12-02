@@ -1,11 +1,11 @@
-package org.jetbrains.kotlin.graph.dijkstra
+package org.jetbrains.kotlin.graph.boruvka
+
 
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.kotlin.dispatcher.PriorityQueueCoroutineDispatcher
-import org.jetbrains.kotlin.graph.util.nodes.Node
-import org.jetbrains.kotlin.graph.util.nodes.clearNodes
-import org.jetbrains.kotlin.graph.util.readGraphNodes
+import org.jetbrains.kotlin.graph.util.edges.Graph
+import org.jetbrains.kotlin.graph.util.readGraph
 import org.jetbrains.kotlin.scheduler.ExperimentalPriorityCoroutineScheduler
 import org.junit.jupiter.api.Test
 import org.openjdk.jmh.annotations.*
@@ -17,21 +17,27 @@ import java.util.concurrent.TimeUnit
 @BenchmarkMode(Mode.Throughput)
 @Warmup(iterations = 3)
 @Measurement(iterations = 10, time = 5, timeUnit = TimeUnit.SECONDS)
-@Threads(8)
+@Threads(4)
 @Fork(1)
 @OutputTimeUnit(TimeUnit.SECONDS)
-open class BenchmarkDchMiner {
+open class BenchmarkBoruvka {
 
     @Benchmark
     fun testSequence(graph: TestGraph, blackhole: Blackhole) = runBlocking {
-        asyncDijkstra(graph.dispatcher, graph.nodes[0])
-        blackhole.consume(graph.nodes)
+        asyncBoruvka(graph.graph.nodes, graph.graph.edges, graph.dispatcher)
+        blackhole.consume(graph.graph)
     }
 
     @State(Scope.Thread)
     open class TestGraph {
 
-        lateinit var nodes: List<Node>
+        @Param(
+            "src/test/resources/data/DCh-Miner_miner-disease-chemical.tsv",
+            "src/test/resources/data/twitter_combined.txt"
+        )
+        lateinit var sourcePath: String
+
+        lateinit var graph: Graph
 
         lateinit var dispatcher: CoroutineDispatcher
 
@@ -41,12 +47,7 @@ open class BenchmarkDchMiner {
         fun setup() {
             scheduler = ExperimentalPriorityCoroutineScheduler(4, startThreads = true, pSteal = 0.05)
             dispatcher = PriorityQueueCoroutineDispatcher(scheduler)
-            nodes = readGraphNodes("src/test/resources/data/DCh-Miner_miner-disease-chemical.tsv")
-        }
-
-        @TearDown(Level.Invocation)
-        fun clear() {
-            clearNodes(nodes)
+            graph = readGraph(sourcePath)
         }
 
         @TearDown(Level.Trial)
@@ -60,7 +61,8 @@ open class BenchmarkDchMiner {
     @Test
     fun `run benchmark`() {
         val options = OptionsBuilder()
-            .include(BenchmarkDchMiner::class.java.simpleName)
+            .include(BenchmarkBoruvka::class.java.simpleName)
+            .jvmArgs("-Xms4096M", "-Xmx6144M")
             .build()
 
         Runner(options).run()

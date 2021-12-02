@@ -1,4 +1,5 @@
-package org.jetbrains.kotlin.graph.dijkstra
+package org.jetbrains.kotlin.graph.bfs
+
 
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.runBlocking
@@ -20,16 +21,22 @@ import java.util.concurrent.TimeUnit
 @Threads(8)
 @Fork(1)
 @OutputTimeUnit(TimeUnit.SECONDS)
-open class BenchmarkTwitter {
+open class BenchmarkBfs {
 
     @Benchmark
     fun testSequence(graph: TestGraph, blackhole: Blackhole) = runBlocking {
-        asyncDijkstra(graph.dispatcher, graph.nodes[0])
+        asyncBFS(graph.dispatcher, graph.nodes[0])
         blackhole.consume(graph.nodes)
     }
 
     @State(Scope.Thread)
     open class TestGraph {
+
+        @Param(
+            "src/test/resources/data/DCh-Miner_miner-disease-chemical.tsv",
+            "src/test/resources/data/twitter_combined.txt"
+        )
+        lateinit var sourcePath: String
 
         lateinit var nodes: List<Node>
 
@@ -41,7 +48,7 @@ open class BenchmarkTwitter {
         fun setup() {
             scheduler = ExperimentalPriorityCoroutineScheduler(4, startThreads = true, pSteal = 0.05)
             dispatcher = PriorityQueueCoroutineDispatcher(scheduler)
-            nodes = readGraphNodes("src/test/resources/data/twitter_combined.txt")
+            nodes = readGraphNodes(sourcePath)
         }
 
         @TearDown(Level.Invocation)
@@ -60,7 +67,8 @@ open class BenchmarkTwitter {
     @Test
     fun `run benchmark`() {
         val options = OptionsBuilder()
-            .include(BenchmarkTwitter::class.java.simpleName)
+            .include(BenchmarkBfs::class.java.simpleName)
+            .jvmArgs("-Xms4096M", "-Xmx6144M")
             .build()
 
         Runner(options).run()
