@@ -1,12 +1,7 @@
 package org.jetbrains.kotlin.graph.boruvka
 
-
-import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.runBlocking
-import org.jetbrains.kotlin.dispatcher.PriorityQueueCoroutineDispatcher
 import org.jetbrains.kotlin.graph.util.edges.Graph
 import org.jetbrains.kotlin.graph.util.readGraph
-import org.jetbrains.kotlin.scheduler.ExperimentalPriorityCoroutineScheduler
 import org.junit.jupiter.api.Test
 import org.openjdk.jmh.annotations.*
 import org.openjdk.jmh.infra.Blackhole
@@ -20,11 +15,11 @@ import java.util.concurrent.TimeUnit
 @Threads(4)
 @Fork(1)
 @OutputTimeUnit(TimeUnit.SECONDS)
-open class BenchmarkBoruvka {
+open class BenchmarkBoruvkaParallel {
 
     @Benchmark
-    fun testSequence(graph: TestGraph, blackhole: Blackhole) = runBlocking {
-        asyncBoruvka(graph.graph.nodes, graph.graph.edges, graph.dispatcher)
+    fun testSequence(graph: TestGraph, blackhole: Blackhole) {
+        parallelBoruvka(graph.graph.nodes, graph.graph.edges, 4)
         blackhole.consume(graph.graph)
     }
 
@@ -39,20 +34,10 @@ open class BenchmarkBoruvka {
 
         lateinit var graph: Graph
 
-        lateinit var dispatcher: CoroutineDispatcher
-
-        private lateinit var scheduler: ExperimentalPriorityCoroutineScheduler
 
         @Setup(Level.Trial)
         fun setup() {
-            scheduler = ExperimentalPriorityCoroutineScheduler(4, startThreads = true, pSteal = 0.05)
-            dispatcher = PriorityQueueCoroutineDispatcher(scheduler)
             graph = readGraph(sourcePath)
-        }
-
-        @TearDown(Level.Trial)
-        fun closeDispatcher() {
-            scheduler.close()
         }
 
     }
@@ -61,7 +46,7 @@ open class BenchmarkBoruvka {
     @Test
     fun `run benchmark`() {
         val options = OptionsBuilder()
-            .include(BenchmarkBoruvka::class.java.simpleName)
+            .include(BenchmarkBoruvkaParallel::class.java.simpleName)
             .jvmArgs("-Xms4096M", "-Xmx6144M")
             .build()
 

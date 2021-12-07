@@ -1,13 +1,8 @@
-package org.jetbrains.kotlin.graph.delaunay
+package org.jetbrains.kotlin.graph.bfs
 
-import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.runBlocking
-import org.jetbrains.kotlin.dispatcher.PriorityQueueCoroutineDispatcher
-import org.jetbrains.kotlin.graph.dijkstra.asyncDijkstra
 import org.jetbrains.kotlin.graph.util.nodes.Node
 import org.jetbrains.kotlin.graph.util.nodes.clearNodes
 import org.jetbrains.kotlin.graph.util.readGraphNodes
-import org.jetbrains.kotlin.scheduler.ExperimentalPriorityCoroutineScheduler
 import org.junit.jupiter.api.Test
 import org.openjdk.jmh.annotations.*
 import org.openjdk.jmh.infra.Blackhole
@@ -18,14 +13,14 @@ import java.util.concurrent.TimeUnit
 @BenchmarkMode(Mode.Throughput)
 @Warmup(iterations = 3)
 @Measurement(iterations = 10, time = 5, timeUnit = TimeUnit.SECONDS)
-@Threads(4)
+@Threads(8)
 @Fork(1)
 @OutputTimeUnit(TimeUnit.SECONDS)
-open class BenchmarkDelaunay {
+open class BenchmarkBfsParallel {
 
     @Benchmark
-    fun testSequence(graph: TestGraph, blackhole: Blackhole) = runBlocking {
-        asyncDijkstra(graph.dispatcher, graph.nodes[0])
+    fun testSequence(graph: TestGraph, blackhole: Blackhole) {
+        bfsParallel(graph.nodes[0])
         blackhole.consume(graph.nodes)
     }
 
@@ -40,14 +35,8 @@ open class BenchmarkDelaunay {
 
         lateinit var nodes: List<Node>
 
-        lateinit var dispatcher: CoroutineDispatcher
-
-        private lateinit var scheduler: ExperimentalPriorityCoroutineScheduler
-
         @Setup(Level.Trial)
         fun setup() {
-            scheduler = ExperimentalPriorityCoroutineScheduler(4, startThreads = true, pSteal = 0.05)
-            dispatcher = PriorityQueueCoroutineDispatcher(scheduler)
             nodes = readGraphNodes(sourcePath)
         }
 
@@ -56,18 +45,13 @@ open class BenchmarkDelaunay {
             clearNodes(nodes)
         }
 
-        @TearDown(Level.Trial)
-        fun closeDispatcher() {
-            scheduler.close()
-        }
-
     }
 
 
     @Test
     fun `run benchmark`() {
         val options = OptionsBuilder()
-            .include(BenchmarkDelaunay::class.java.simpleName)
+            .include(BenchmarkBfsParallel::class.java.simpleName)
             .jvmArgs("-Xms4096M", "-Xmx6144M")
             .build()
 

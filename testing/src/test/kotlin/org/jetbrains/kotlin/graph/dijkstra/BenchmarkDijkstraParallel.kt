@@ -14,17 +14,18 @@ import org.openjdk.jmh.runner.Runner
 import org.openjdk.jmh.runner.options.OptionsBuilder
 import java.util.concurrent.TimeUnit
 
+
 @BenchmarkMode(Mode.Throughput)
 @Warmup(iterations = 3)
 @Measurement(iterations = 10, time = 5, timeUnit = TimeUnit.SECONDS)
 @Threads(4)
 @Fork(1)
 @OutputTimeUnit(TimeUnit.SECONDS)
-open class BenchmarkDijkstra {
+open class BenchmarkDijkstraParallel {
 
     @Benchmark
-    fun testSequence(graph: TestGraph, blackhole: Blackhole) = runBlocking {
-        asyncDijkstra(graph.dispatcher, graph.nodes[0])
+    fun testSequence(graph: TestGraph, blackhole: Blackhole)  {
+        shortestPathParallel(graph.nodes[0], workers = 4)
         blackhole.consume(graph.nodes)
     }
 
@@ -39,14 +40,9 @@ open class BenchmarkDijkstra {
 
         lateinit var nodes: List<Node>
 
-        lateinit var dispatcher: CoroutineDispatcher
-
-        private lateinit var scheduler: ExperimentalPriorityCoroutineScheduler
 
         @Setup(Level.Trial)
         fun setup() {
-            scheduler = ExperimentalPriorityCoroutineScheduler(4, startThreads = true, pSteal = 0.05)
-            dispatcher = PriorityQueueCoroutineDispatcher(scheduler)
             nodes = readGraphNodes(sourcePath)
         }
 
@@ -55,18 +51,13 @@ open class BenchmarkDijkstra {
             clearNodes(nodes)
         }
 
-        @TearDown(Level.Trial)
-        fun closeDispatcher() {
-            scheduler.close()
-        }
-
     }
 
 
     @Test
     fun `run benchmark`() {
         val options = OptionsBuilder()
-            .include(BenchmarkDijkstra::class.java.simpleName)
+            .include(BenchmarkDijkstraParallel::class.java.simpleName)
             .jvmArgs("-Xms4096M", "-Xmx6144M")
             .build()
 

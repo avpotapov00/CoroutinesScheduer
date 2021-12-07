@@ -2,11 +2,13 @@ package org.jetbrains.kotlin.graph.util.nodes
 
 import kotlinx.atomicfu.atomic
 
-val NODE_DISTANCE_COMPARATOR = Comparator<Node> { o1, o2 -> Integer.compare(o1!!.distance, o2!!.distance) }
+val NODE_DISTANCE_COMPARATOR = Comparator<Node> { o1, o2 -> o1.distance.compareTo(o2.distance) }
+
+
 
 data class Edge(val to: Node, val weight: Int)
 
-open class Node {
+open class Node: RankedNode<Int> {
     private val _outgoingEdges = arrayListOf<Edge>()
     val outgoingEdges: List<Edge> = _outgoingEdges
 
@@ -16,6 +18,9 @@ open class Node {
         set(value) {
             _distance.value = value
         }
+
+    override val rank: Comparable<Int>
+        get() = distance
 
     fun casDistance(cur: Int, update: Int) = _distance.compareAndSet(cur, update)
 

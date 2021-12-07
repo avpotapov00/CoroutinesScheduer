@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit
 @Threads(8)
 @Fork(1)
 @OutputTimeUnit(TimeUnit.SECONDS)
-open class BenchmarkBfs {
+open class BenchmarkBfsAsync {
 
     @Benchmark
     fun testSequence(graph: TestGraph, blackhole: Blackhole) = runBlocking {
@@ -67,7 +67,7 @@ open class BenchmarkBfs {
     @Test
     fun `run benchmark`() {
         val options = OptionsBuilder()
-            .include(BenchmarkBfs::class.java.simpleName)
+            .include(BenchmarkBfsAsync::class.java.simpleName)
             .jvmArgs("-Xms4096M", "-Xmx6144M")
             .build()
 

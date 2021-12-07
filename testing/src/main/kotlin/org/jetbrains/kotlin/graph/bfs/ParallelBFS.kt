@@ -7,7 +7,7 @@ import java.util.concurrent.Phaser
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.thread
 
-fun shortestPathParallel(
+fun bfsParallel(
     start: Node,
     workers: Int = Runtime.getRuntime().availableProcessors()
 ) {

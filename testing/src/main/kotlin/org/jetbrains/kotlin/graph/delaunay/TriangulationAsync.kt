@@ -66,12 +66,4 @@ class TriangulationAsync(
 
 }
 
-fun main(): Unit = runBlocking {
-    val file = "testing/src/main/resources/data.delaunay/sample_0"
-    val points = readPoints(File(file))
-
-    val result = TriangulationAsync(points).bowyerWatson(Dispatchers.Default)
-
-    checkTriangulation(points, result.toList())
-}
 
