@@ -33,7 +33,8 @@ open class BenchmarkDijkstraAsync {
 
         @Param(
             "src/test/resources/data/graphs/DCh-Miner_miner-disease-chemical.tsv",
-            "src/test/resources/data/graphs/twitter_combined.txt"
+            "src/test/resources/data/graphs/twitter_combined.txt",
+            "src/test/resources/data/graphs/musae_DE_edges_ok.csv",
         )
         lateinit var sourcePath: String
 

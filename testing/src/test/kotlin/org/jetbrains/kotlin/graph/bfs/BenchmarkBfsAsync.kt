@@ -34,7 +34,8 @@ open class BenchmarkBfsAsync {
 
         @Param(
             "src/test/resources/data/DCh-Miner_miner-disease-chemical.tsv",
-            "src/test/resources/data/twitter_combined.txt"
+            "src/test/resources/data/twitter_combined.txt",
+            "src/test/resources/data/graphs/musae_DE_edges_ok.csv"
         )
         lateinit var sourcePath: String
 
