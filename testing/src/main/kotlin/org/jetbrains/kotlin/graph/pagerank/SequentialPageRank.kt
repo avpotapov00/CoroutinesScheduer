@@ -10,6 +10,8 @@ fun pagerankSequential(nodes: List<Node>, dense: Float, epsilon: Float) {
     val initialValue = 1f / nodes.size
     nodes.forEach { it.clear(initialValue) }
 
+    queue.add(nodes[0])
+
     while (queue.isNotEmpty()) {
         val recent = queue.poll()
 
