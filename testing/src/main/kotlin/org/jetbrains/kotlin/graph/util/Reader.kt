@@ -5,34 +5,41 @@ import org.jetbrains.kotlin.graph.util.edges.Graph
 import org.jetbrains.kotlin.graph.util.nodes.Node
 import java.io.File
 
-fun readGraph(fileName: String): Graph {
-
-    var nodeIndex = 0
-    val map = mutableMapOf<String, Int>()
-
-    val edges = mutableListOf<Edge>()
-
+fun readGraphEdges(fileName: String): Graph {
     File(fileName).bufferedReader().use { reader ->
-        reader.lineSequence()
-            .forEach { line ->
-                val arr = line.split(" ")
-                val from = arr[0]
-                val to = arr[1]
+        val edges = mutableListOf<Edge>()
 
-                if (!map.containsKey(from)) {
-                    map[from] = nodeIndex++
-                }
-                if (!map.containsKey(to)) {
-                    map[to] = nodeIndex++
-                }
+        val count = reader.readLine().toInt()
 
-                edges.add(Edge(map[from]!!, map[to]!!, 1))
-            }
+        reader.lines().forEach { line ->
+            val arr = line.split(" ")
+            val from = arr[0].toInt()
+            val to = arr[1].toInt()
+            val weight = arr[2].toInt()
+
+            edges.add(Edge(from, to, weight))
+        }
+
+        return Graph(count, edges)
     }
-
-    return Graph(map.size, edges)
 }
 
-fun readGraphNodes(fileName: String): List<Node> {
-    return graphEdgesToGraphNodes(readGraph(fileName))
+fun readGraphNodesBiDirect(fileName: String): List<Node> {
+    File(fileName).bufferedReader().use { reader ->
+        val count = reader.readLine().toInt()
+
+        val nodes = Array(count) { Node() }
+
+        reader.lines().forEach { line ->
+            val arr = line.split(" ")
+            val from = arr[0].toInt()
+            val to = arr[1].toInt()
+            val weight = arr[2].toInt()
+
+            nodes[from].addEdge(nodes[to], weight)
+            nodes[to].addEdge(nodes[from], weight)
+        }
+
+        return nodes.toList()
+    }
 }

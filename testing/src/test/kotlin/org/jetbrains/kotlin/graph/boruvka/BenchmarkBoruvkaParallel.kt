@@ -1,7 +1,7 @@
 package org.jetbrains.kotlin.graph.boruvka
 
 import org.jetbrains.kotlin.graph.util.edges.Graph
-import org.jetbrains.kotlin.graph.util.readGraph
+import org.jetbrains.kotlin.graph.util.readGraphEdges
 import org.junit.jupiter.api.Test
 import org.openjdk.jmh.annotations.*
 import org.openjdk.jmh.infra.Blackhole
@@ -27,8 +27,8 @@ open class BenchmarkBoruvkaParallel {
     open class TestGraph {
 
         @Param(
-            "src/test/resources/data/DCh-Miner_miner-disease-chemical.tsv",
-            "src/test/resources/data/twitter_combined.txt"
+            "src/test/resources/data/graphs/DCh-Miner_miner-disease-chemical.tsv",
+            "src/test/resources/data/graphs/twitter_combined.txt"
         )
         lateinit var sourcePath: String
 
@@ -37,7 +37,7 @@ open class BenchmarkBoruvkaParallel {
 
         @Setup(Level.Trial)
         fun setup() {
-            graph = readGraph(sourcePath)
+            graph = readGraphEdges(sourcePath)
         }
 
     }

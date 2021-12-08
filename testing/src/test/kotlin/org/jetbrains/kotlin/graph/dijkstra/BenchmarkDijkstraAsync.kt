@@ -5,7 +5,7 @@ import kotlinx.coroutines.runBlocking
 import org.jetbrains.kotlin.dispatcher.PriorityQueueCoroutineDispatcher
 import org.jetbrains.kotlin.graph.util.nodes.Node
 import org.jetbrains.kotlin.graph.util.nodes.clearNodes
-import org.jetbrains.kotlin.graph.util.readGraphNodes
+import org.jetbrains.kotlin.graph.util.readGraphNodesBiDirect
 import org.jetbrains.kotlin.scheduler.ExperimentalPriorityCoroutineScheduler
 import org.junit.jupiter.api.Test
 import org.openjdk.jmh.annotations.*
@@ -32,8 +32,8 @@ open class BenchmarkDijkstraAsync {
     open class TestGraph {
 
         @Param(
-            "src/test/resources/data/DCh-Miner_miner-disease-chemical.tsv",
-            "src/test/resources/data/twitter_combined.txt"
+            "src/test/resources/data/graphs/DCh-Miner_miner-disease-chemical.tsv",
+            "src/test/resources/data/graphs/twitter_combined.txt"
         )
         lateinit var sourcePath: String
 
@@ -47,7 +47,7 @@ open class BenchmarkDijkstraAsync {
         fun setup() {
             scheduler = ExperimentalPriorityCoroutineScheduler(4, startThreads = true, pSteal = 0.05)
             dispatcher = PriorityQueueCoroutineDispatcher(scheduler)
-            nodes = readGraphNodes(sourcePath)
+            nodes = readGraphNodesBiDirect(sourcePath)
         }
 
         @TearDown(Level.Invocation)

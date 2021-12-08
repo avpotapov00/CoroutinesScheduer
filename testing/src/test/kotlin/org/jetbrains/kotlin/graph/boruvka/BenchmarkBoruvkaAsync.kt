@@ -4,7 +4,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.kotlin.dispatcher.PriorityQueueCoroutineDispatcher
 import org.jetbrains.kotlin.graph.util.edges.Graph
-import org.jetbrains.kotlin.graph.util.readGraph
+import org.jetbrains.kotlin.graph.util.readGraphEdges
 import org.jetbrains.kotlin.scheduler.ExperimentalPriorityCoroutineScheduler
 import org.junit.jupiter.api.Test
 import org.openjdk.jmh.annotations.*
@@ -31,8 +31,8 @@ open class BenchmarkBoruvkaAsync {
     open class TestGraph {
 
         @Param(
-            "src/test/resources/data/DCh-Miner_miner-disease-chemical.tsv",
-            "src/test/resources/data/twitter_combined.txt"
+            "src/test/resources/data/graphs/DCh-Miner_miner-disease-chemical.tsv",
+            "src/test/resources/data/graphs/twitter_combined.txt"
         )
         lateinit var sourcePath: String
 
@@ -46,7 +46,7 @@ open class BenchmarkBoruvkaAsync {
         fun setup() {
             scheduler = ExperimentalPriorityCoroutineScheduler(4, startThreads = true, pSteal = 0.05)
             dispatcher = PriorityQueueCoroutineDispatcher(scheduler)
-            graph = readGraph(sourcePath)
+            graph = readGraphEdges(sourcePath)
         }
 
         @TearDown(Level.Trial)

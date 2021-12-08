@@ -6,7 +6,7 @@ import kotlinx.coroutines.runBlocking
 import org.jetbrains.kotlin.dispatcher.PriorityQueueCoroutineDispatcher
 import org.jetbrains.kotlin.graph.util.nodes.Node
 import org.jetbrains.kotlin.graph.util.nodes.clearNodes
-import org.jetbrains.kotlin.graph.util.readGraphNodes
+import org.jetbrains.kotlin.graph.util.readGraphNodesBiDirect
 import org.jetbrains.kotlin.scheduler.ExperimentalPriorityCoroutineScheduler
 import org.junit.jupiter.api.Test
 import org.openjdk.jmh.annotations.*
@@ -48,7 +48,7 @@ open class BenchmarkBfsAsync {
         fun setup() {
             scheduler = ExperimentalPriorityCoroutineScheduler(4, startThreads = true, pSteal = 0.05)
             dispatcher = PriorityQueueCoroutineDispatcher(scheduler)
-            nodes = readGraphNodes(sourcePath)
+            nodes = readGraphNodesBiDirect(sourcePath)
         }
 
         @TearDown(Level.Invocation)
