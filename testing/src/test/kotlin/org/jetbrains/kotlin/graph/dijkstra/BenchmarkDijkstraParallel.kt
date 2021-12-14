@@ -14,19 +14,23 @@ import java.util.concurrent.TimeUnit
 @BenchmarkMode(Mode.Throughput)
 @Warmup(iterations = 3)
 @Measurement(iterations = 10, time = 5, timeUnit = TimeUnit.SECONDS)
-@Threads(4)
+@Threads(1)
 @Fork(1)
 @OutputTimeUnit(TimeUnit.SECONDS)
 open class BenchmarkDijkstraParallel {
 
     @Benchmark
-    fun testSequence(graph: TestGraph, blackhole: Blackhole)  {
-        shortestPathParallel(graph.nodes[0], workers = 4)
-        blackhole.consume(graph.nodes)
+    fun testSequence(config: Config)  {
+        shortestPathParallel(config.nodes[0], workers = config.threads)
     }
 
     @State(Scope.Thread)
-    open class TestGraph {
+    open class Config {
+
+        @Param(
+            "1", "2", "3", "4", "5", "6"
+        )
+        var threads: Int = 0
 
         @Param(
             "src/test/resources/data/graphs/DCh-Miner_miner-disease-chemical.tsv",

@@ -4,33 +4,39 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import org.jetbrains.kotlin.priority.Priority
-import kotlin.math.abs
 
-suspend fun pagerankAsync(nodes: List<Node>, dense: Float, epsilon: Float, dispatcher: CoroutineDispatcher) =
+suspend fun pagerankAsyncPush(nodes: List<Node>, dense: Float, epsilon: Float, dispatcher: CoroutineDispatcher) =
     coroutineScope {
 
         val initialValue = 1f / nodes.size
         nodes.forEach { it.clear(initialValue) }
 
+        nodes.forEach { node ->
+            node.rank = node.incomingEdges.map { 1f / it.outgoingEdges.size }.sum()
+            node.rank = (1 - dense) * dense * node.rank
+        }
+
         fun processNode(node: Node) {
-            val newRank = 1 - dense + dense * node.outgoingEdges.map { it.impact }.sum()
+            val nodeR = node.rank
+            node.rank = 0f
 
-            var oldRank = node.rank
+            node.outgoingEdges.forEach { outgoingNode ->
 
-            while (abs(newRank - oldRank) > epsilon) {
+                var newR: Float
+                var oldR: Float
 
-                if (node.casRank(oldRank, newRank)) {
-                    node.outgoingEdges.forEach {
-                        launch(dispatcher + Priority((newRank * 1000).toInt())) {
-                            processNode(it)
-                        }
-                    }
-                    break
+                do {
+                    oldR = outgoingNode.rank
+                    newR = oldR + (nodeR * dense) / node.outgoingEdges.size
+                } while (!outgoingNode.casRank(oldR, newR))
+
+                if (newR >= epsilon && oldR < epsilon) {
+                    val prior = -(newR * 10_000).toInt()
+                    launch(dispatcher + Priority(prior)) { processNode(outgoingNode) }
                 }
-
-                oldRank = node.rank
             }
         }
 
-        processNode(nodes[0])
+        nodes.forEach { launch(dispatcher) { processNode(it) } }
     }
+

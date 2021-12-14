@@ -18,26 +18,33 @@ import java.util.concurrent.TimeUnit
 @BenchmarkMode(Mode.Throughput)
 @Warmup(iterations = 3)
 @Measurement(iterations = 10, time = 5, timeUnit = TimeUnit.SECONDS)
-@Threads(8)
+@Threads(1)
 @Fork(1)
 @OutputTimeUnit(TimeUnit.SECONDS)
 open class BenchmarkBfsAsync {
 
     @Benchmark
-    fun testSequence(graph: TestGraph, blackhole: Blackhole) = runBlocking {
+    fun testSequence(graph: TestGraph) = runBlocking {
         asyncBFS(graph.dispatcher, graph.nodes[0])
-        blackhole.consume(graph.nodes)
     }
 
     @State(Scope.Thread)
     open class TestGraph {
 
         @Param(
-            "src/test/resources/data/DCh-Miner_miner-disease-chemical.tsv",
-            "src/test/resources/data/twitter_combined.txt",
-            "src/test/resources/data/graphs/musae_DE_edges_ok.csv"
+            "src/test/resources/data/graphs/DCh-Miner_miner-disease-chemical.tsv",
+            "src/test/resources/data/graphs/twitter_combined.txt",
+            "src/test/resources/data/graphs/musae_DE_edges_ok.csv",
         )
         lateinit var sourcePath: String
+
+        @Param(
+            "1", "2", "3", "4", "5", "6"
+        )
+        private var threads: Int = 0
+
+        @Param("0.1" ,"0.2", "0.04", "0.016")
+        private var pSteal = 0.1
 
         lateinit var nodes: List<Node>
 
@@ -47,7 +54,7 @@ open class BenchmarkBfsAsync {
 
         @Setup(Level.Trial)
         fun setup() {
-            scheduler = ExperimentalPriorityCoroutineScheduler(4, startThreads = true, pSteal = 0.05)
+            scheduler = ExperimentalPriorityCoroutineScheduler(threads, startThreads = true, pSteal = pSteal)
             dispatcher = PriorityQueueCoroutineDispatcher(scheduler)
             nodes = readGraphNodesBiDirect(sourcePath)
         }

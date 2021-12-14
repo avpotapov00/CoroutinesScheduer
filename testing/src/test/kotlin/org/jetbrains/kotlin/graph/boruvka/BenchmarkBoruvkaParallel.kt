@@ -12,24 +12,28 @@ import java.util.concurrent.TimeUnit
 @BenchmarkMode(Mode.Throughput)
 @Warmup(iterations = 3)
 @Measurement(iterations = 10, time = 5, timeUnit = TimeUnit.SECONDS)
-@Threads(4)
+@Threads(1)
 @Fork(1)
 @OutputTimeUnit(TimeUnit.SECONDS)
 open class BenchmarkBoruvkaParallel {
 
     @Benchmark
-    fun testSequence(graph: TestGraph, blackhole: Blackhole) {
-        parallelBoruvka(graph.graph.nodes, graph.graph.edges, 4)
-        blackhole.consume(graph.graph)
+    fun testSequence(config: Config) {
+        parallelBoruvka(config.graph.nodes, config.graph.edges, config.threads)
     }
 
     @State(Scope.Thread)
-    open class TestGraph {
+    open class Config {
+
+        @Param(
+            "1", "2", "3", "4", "5", "6"
+        )
+        var threads: Int = 0
 
         @Param(
             "src/test/resources/data/graphs/DCh-Miner_miner-disease-chemical.tsv",
             "src/test/resources/data/graphs/twitter_combined.txt",
-            "src/test/resources/data/graphs/musae_DE_edges_ok.csv"
+            "src/test/resources/data/graphs/musae_DE_edges_ok.csv",
         )
         lateinit var sourcePath: String
 

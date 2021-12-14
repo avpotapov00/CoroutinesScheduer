@@ -1,14 +1,11 @@
-package org.jetbrains.kotlin.graph.boruvka
+package org.jetbrains.kotlin.graph.pagerank
 
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.kotlin.dispatcher.PriorityQueueCoroutineDispatcher
-import org.jetbrains.kotlin.graph.util.edges.Graph
-import org.jetbrains.kotlin.graph.util.readGraphEdges
 import org.jetbrains.kotlin.scheduler.ExperimentalPriorityCoroutineScheduler
 import org.junit.jupiter.api.Test
 import org.openjdk.jmh.annotations.*
-import org.openjdk.jmh.infra.Blackhole
 import org.openjdk.jmh.runner.Runner
 import org.openjdk.jmh.runner.options.OptionsBuilder
 import java.util.concurrent.TimeUnit
@@ -19,15 +16,15 @@ import java.util.concurrent.TimeUnit
 @Threads(1)
 @Fork(1)
 @OutputTimeUnit(TimeUnit.SECONDS)
-open class BenchmarkBoruvkaAsync {
+open class PagerankBenchmarkTest {
 
     @Benchmark
-    fun testSequence(graph: TestGraph) = runBlocking {
-        asyncBoruvka(graph.graph.nodes, graph.graph.edges, graph.dispatcher)
+    fun testSequence(config: Config) = runBlocking {
+        pagerankAsyncPush(config.nodes, 0.85f, 0.01f, config.dispatcher)
     }
 
     @State(Scope.Thread)
-    open class TestGraph {
+    open class Config {
 
         @Param(
             "src/test/resources/data/graphs/DCh-Miner_miner-disease-chemical.tsv",
@@ -44,7 +41,7 @@ open class BenchmarkBoruvkaAsync {
         @Param("0.1" ,"0.2", "0.04", "0.016")
         private var pSteal = 0.1
 
-        lateinit var graph: Graph
+        lateinit var nodes: List<Node>
 
         lateinit var dispatcher: CoroutineDispatcher
 
@@ -54,7 +51,12 @@ open class BenchmarkBoruvkaAsync {
         fun setup() {
             scheduler = ExperimentalPriorityCoroutineScheduler(threads, startThreads = true, pSteal = pSteal)
             dispatcher = PriorityQueueCoroutineDispatcher(scheduler)
-            graph = readGraphEdges(sourcePath)
+            nodes = readGraphNodes(sourcePath)
+        }
+
+        @TearDown(Level.Invocation)
+        fun clear() {
+            clearNodes(0f, nodes)
         }
 
         @TearDown(Level.Trial)
@@ -68,7 +70,7 @@ open class BenchmarkBoruvkaAsync {
     @Test
     fun `run benchmark`() {
         val options = OptionsBuilder()
-            .include(BenchmarkBoruvkaAsync::class.java.simpleName)
+            .include(PagerankBenchmarkTest::class.java.simpleName)
             .jvmArgs("-Xms4096M", "-Xmx6144M")
             .build()
 

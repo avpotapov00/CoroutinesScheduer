@@ -17,19 +17,18 @@ import java.util.concurrent.TimeUnit
 @BenchmarkMode(Mode.Throughput)
 @Warmup(iterations = 3)
 @Measurement(iterations = 10, time = 5, timeUnit = TimeUnit.SECONDS)
-@Threads(4)
+@Threads(1)
 @Fork(1)
 @OutputTimeUnit(TimeUnit.SECONDS)
 open class BenchmarkDijkstraAsync {
 
     @Benchmark
-    fun testSequence(graph: TestGraph, blackhole: Blackhole) = runBlocking {
-        asyncDijkstra(graph.dispatcher, graph.nodes[0])
-        blackhole.consume(graph.nodes)
+    fun testSequence(config: Config) = runBlocking {
+        asyncDijkstra(config.dispatcher, config.nodes[0])
     }
 
     @State(Scope.Thread)
-    open class TestGraph {
+    open class Config {
 
         @Param(
             "src/test/resources/data/graphs/DCh-Miner_miner-disease-chemical.tsv",
@@ -37,6 +36,14 @@ open class BenchmarkDijkstraAsync {
             "src/test/resources/data/graphs/musae_DE_edges_ok.csv",
         )
         lateinit var sourcePath: String
+
+        @Param(
+            "1", "2", "3", "4", "5", "6"
+        )
+        private var threads: Int = 0
+
+        @Param("0.1" ,"0.2", "0.04", "0.016")
+        private var pSteal = 0.1
 
         lateinit var nodes: List<Node>
 
@@ -46,7 +53,7 @@ open class BenchmarkDijkstraAsync {
 
         @Setup(Level.Trial)
         fun setup() {
-            scheduler = ExperimentalPriorityCoroutineScheduler(4, startThreads = true, pSteal = 0.05)
+            scheduler = ExperimentalPriorityCoroutineScheduler(threads, startThreads = true, pSteal = pSteal)
             dispatcher = PriorityQueueCoroutineDispatcher(scheduler)
             nodes = readGraphNodesBiDirect(sourcePath)
         }

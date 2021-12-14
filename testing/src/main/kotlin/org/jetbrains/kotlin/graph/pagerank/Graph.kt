@@ -12,7 +12,7 @@ open class Node(
 
     val incomingEdges = arrayListOf<Node>()
 
-    private val _rank = atomic(initialRank)
+    private val _rank = AtomicFloat(initialRank)
     override var rank
         get() = _rank.value
         set(value) {
