@@ -23,8 +23,13 @@ import java.util.concurrent.TimeUnit
 open class BenchmarkDijkstraAsync {
 
     @Benchmark
-    fun testSequence(config: Config) = runBlocking {
+    fun asyncDijkstraTest(config: Config) = runBlocking {
         asyncDijkstra(config.dispatcher, config.nodes[0])
+    }
+
+    @Benchmark
+    fun asyncDijkstraGlobalScopeTest(config: Config) = runBlocking {
+        asyncDijkstraGlobalScope(config.dispatcher, config.nodes[0])
     }
 
     @State(Scope.Thread)

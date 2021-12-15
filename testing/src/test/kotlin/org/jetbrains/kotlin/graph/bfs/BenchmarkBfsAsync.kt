@@ -24,8 +24,13 @@ import java.util.concurrent.TimeUnit
 open class BenchmarkBfsAsync {
 
     @Benchmark
-    fun testSequence(graph: TestGraph) = runBlocking {
+    fun asyncBFSTest(graph: TestGraph) = runBlocking {
         asyncBFS(graph.dispatcher, graph.nodes[0])
+    }
+
+    @Benchmark
+    fun asyncBFSTestGlobalScope(graph: TestGraph) = runBlocking {
+        asyncBFSGlobalScope(graph.dispatcher, graph.nodes[0])
     }
 
     @State(Scope.Thread)

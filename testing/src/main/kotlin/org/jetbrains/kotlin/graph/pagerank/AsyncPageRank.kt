@@ -1,9 +1,12 @@
 package org.jetbrains.kotlin.graph.pagerank
 
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import org.jetbrains.kotlin.graph.util.IntPhaser
 import org.jetbrains.kotlin.priority.Priority
+import kotlin.math.abs
 
 suspend fun pagerankAsyncPush(nodes: List<Node>, dense: Float, epsilon: Float, dispatcher: CoroutineDispatcher) =
     coroutineScope {
@@ -40,3 +43,38 @@ suspend fun pagerankAsyncPush(nodes: List<Node>, dense: Float, epsilon: Float, d
         nodes.forEach { launch(dispatcher) { processNode(it) } }
     }
 
+
+fun pagerankAsync(nodes: List<Node>, dense: Float, epsilon: Float, dispatcher: CoroutineDispatcher) {
+    val initialValue = 1f / nodes.size
+    nodes.forEach { it.clear(initialValue) }
+
+    val phaser = IntPhaser()
+
+    fun processNode(node: Node) {
+        val newRank = 1 - dense + dense * node.incomingEdges.map { it.impact }.sum()
+
+        var oldRank = node.rank
+
+        while (abs(newRank - oldRank) > epsilon) {
+
+            if (node.casRank(oldRank, newRank)) {
+                node.outgoingEdges.forEach {
+
+                    phaser.register()
+                    GlobalScope.launch {
+                        processNode(it)
+                        phaser.arriveAndDeregister()
+                    }
+
+                }
+                break
+            }
+
+            oldRank = node.rank
+        }
+    }
+
+    processNode(nodes[0])
+
+    phaser.lockAndAwait()
+}

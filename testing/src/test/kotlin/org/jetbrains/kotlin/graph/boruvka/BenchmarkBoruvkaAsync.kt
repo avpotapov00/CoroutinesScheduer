@@ -22,8 +22,13 @@ import java.util.concurrent.TimeUnit
 open class BenchmarkBoruvkaAsync {
 
     @Benchmark
-    fun testSequence(graph: TestGraph) = runBlocking {
+    fun asyncBoruvkaTest(graph: TestGraph) = runBlocking {
         asyncBoruvka(graph.graph.nodes, graph.graph.edges, graph.dispatcher)
+    }
+
+    @Benchmark
+    fun asyncBoruvkaGlobalScopeTest(graph: TestGraph) = runBlocking {
+        asyncBoruvkaGlobalScope(graph.graph.nodes, graph.graph.edges, graph.dispatcher)
     }
 
     @State(Scope.Thread)
