@@ -2,9 +2,7 @@ package org.jetbrains.kotlin.graph.util.nodes
 
 import kotlinx.atomicfu.atomic
 
-val NODE_DISTANCE_COMPARATOR = Comparator<Node> { o1, o2 -> o1.distance.compareTo(o2.distance) }
-
-
+val NODE_DISTANCE_COMPARATOR = Comparator<Node> { o1, o2 -> o1.rank.compareTo(o2.rank) }
 
 data class Edge(val to: Node, val weight: Int)
 
@@ -19,7 +17,7 @@ open class Node: RankedNode<Int> {
             _distance.value = value
         }
 
-    override val rank: Comparable<Int>
+    override val rank: Int
         get() = distance
 
     fun casDistance(cur: Int, update: Int) = _distance.compareAndSet(cur, update)

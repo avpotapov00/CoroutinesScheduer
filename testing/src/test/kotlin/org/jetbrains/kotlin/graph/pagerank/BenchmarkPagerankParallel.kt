@@ -16,11 +16,11 @@ import java.util.concurrent.TimeUnit
 @Threads(1)
 @Fork(1)
 @OutputTimeUnit(TimeUnit.SECONDS)
-open class PagerankBenchmarkTest {
+open class BenchmarkPagerankParallel {
 
     @Benchmark
     fun testSequence(config: Config) = runBlocking {
-        pagerankAsyncPush(config.nodes, 0.85f, 0.01f, config.dispatcher)
+        pagerankParallelPush(config.nodes, 0.85f, 0.01f, config.threads)
     }
 
     @State(Scope.Thread)
@@ -36,21 +36,12 @@ open class PagerankBenchmarkTest {
         @Param(
             "1", "2", "3", "4", "5", "6"
         )
-        private var threads: Int = 0
-
-        @Param("0.1" ,"0.2", "0.04", "0.016")
-        private var pSteal = 0.1
+        var threads: Int = 0
 
         lateinit var nodes: List<Node>
 
-        lateinit var dispatcher: CoroutineDispatcher
-
-        private lateinit var scheduler: ExperimentalPriorityCoroutineScheduler
-
         @Setup(Level.Trial)
         fun setup() {
-            scheduler = ExperimentalPriorityCoroutineScheduler(threads, startThreads = true, pSteal = pSteal)
-            dispatcher = PriorityQueueCoroutineDispatcher(scheduler)
             nodes = readGraphNodes(sourcePath)
         }
 
@@ -59,18 +50,12 @@ open class PagerankBenchmarkTest {
             clearNodes(0f, nodes)
         }
 
-        @TearDown(Level.Trial)
-        fun closeDispatcher() {
-            scheduler.close()
-        }
-
     }
-
 
     @Test
     fun `run benchmark`() {
         val options = OptionsBuilder()
-            .include(PagerankBenchmarkTest::class.java.simpleName)
+            .include(BenchmarkPagerankParallel::class.java.simpleName)
             .jvmArgs("-Xms4096M", "-Xmx6144M")
             .build()
 

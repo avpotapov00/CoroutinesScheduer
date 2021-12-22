@@ -1,6 +1,5 @@
 package org.jetbrains.kotlin.graph.pagerank
 
-import kotlinx.atomicfu.atomic
 import org.jetbrains.kotlin.graph.util.nodes.RankedNode
 
 val NODE_RANK_COMPARATOR = Comparator<Node> { o1, o2 -> o1.rank.compareTo(o2.rank) }

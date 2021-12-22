@@ -1,24 +1,23 @@
 package org.jetbrains.kotlin.graph.dijkstra
 
-import org.jetbrains.kotlin.graph.util.nodes.Node
 import java.util.*
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.random.Random
 
-class ParallelMultiQueue(n: Int, comparator: Comparator<Node>) {
+class ParallelMultiQueue<T>(n: Int, private val comparator: Comparator<in T>) {
 
-    private val queues: ArrayList<PriorityQueue<Node>> = arrayListOf();
+    private val queues: ArrayList<PriorityQueue<T>> = arrayListOf()
 
-    private val locks: ArrayList<ReentrantLock> = arrayListOf();
+    private val locks: ArrayList<ReentrantLock> = arrayListOf()
 
     init {
         for (i in 1..(2 * n)) {
-            queues.add(PriorityQueue(n, comparator))
+            queues.add(PriorityQueue<T>(n, comparator))
             locks.add(ReentrantLock(false))
         }
     }
 
-    fun add(node: Node) {
+    fun add(node: T) {
         while (true) {
             val index = Random.nextInt(0, locks.size)
             if (locks[index].tryLock()) {
@@ -29,10 +28,10 @@ class ParallelMultiQueue(n: Int, comparator: Comparator<Node>) {
         }
     }
 
-    fun poll(): Node? {
-        val first: Node?
+    fun poll(): T? {
+        val first: T?
         val indexFirst = Random.nextInt(locks.size)
-        var minNode: Node? = null
+        var minNode: T? = null
 
         if (locks[indexFirst].tryLock()) {
             first = queues[indexFirst].peek()
@@ -51,7 +50,7 @@ class ParallelMultiQueue(n: Int, comparator: Comparator<Node>) {
                         minNode = first
                     }
                     else -> {
-                        if (first.distance < second.distance) {
+                        if (comparator.compare(first, second) < 0) {
                             minNode = first
                             queues[indexFirst].poll()
                         } else {

@@ -2,46 +2,59 @@ package org.jetbrains.kotlin.graph.pagerank
 
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import org.jetbrains.kotlin.graph.util.IntPhaser
 import org.jetbrains.kotlin.priority.Priority
 import kotlin.math.abs
 
-suspend fun pagerankAsyncPush(nodes: List<Node>, dense: Float, epsilon: Float, dispatcher: CoroutineDispatcher) =
-    coroutineScope {
+fun pagerankAsyncPush(nodes: List<Node>, dense: Float, epsilon: Float, dispatcher: CoroutineDispatcher) {
 
-        val initialValue = 1f / nodes.size
-        nodes.forEach { it.clear(initialValue) }
+    val initialValue = 1f / nodes.size
+    nodes.forEach { it.clear(initialValue) }
 
-        nodes.forEach { node ->
-            node.rank = node.incomingEdges.map { 1f / it.outgoingEdges.size }.sum()
-            node.rank = (1 - dense) * dense * node.rank
-        }
+    val phaser = IntPhaser()
 
-        fun processNode(node: Node) {
-            val nodeR = node.rank
-            node.rank = 0f
+    nodes.forEach { node ->
+        node.rank = node.incomingEdges.map { 1f / it.outgoingEdges.size }.sum()
+        node.rank = (1 - dense) * dense * node.rank
+    }
 
-            node.outgoingEdges.forEach { outgoingNode ->
+    fun processNode(node: Node) {
+        val nodeR = node.rank
+        node.rank = 0f
 
-                var newR: Float
-                var oldR: Float
+        node.outgoingEdges.forEach { outgoingNode ->
 
-                do {
-                    oldR = outgoingNode.rank
-                    newR = oldR + (nodeR * dense) / node.outgoingEdges.size
-                } while (!outgoingNode.casRank(oldR, newR))
+            var newR: Float
+            var oldR: Float
 
-                if (newR >= epsilon && oldR < epsilon) {
-                    val prior = -(newR * 10_000).toInt()
-                    launch(dispatcher + Priority(prior)) { processNode(outgoingNode) }
+            do {
+                oldR = outgoingNode.rank
+                newR = oldR + (nodeR * dense) / node.outgoingEdges.size
+            } while (!outgoingNode.casRank(oldR, newR))
+
+            if (newR >= epsilon && oldR < epsilon) {
+                val prior = -(newR * 10_000).toInt()
+
+                phaser.register()
+                GlobalScope.launch(dispatcher + Priority(prior)) {
+                    processNode(outgoingNode)
+                    phaser.arriveAndDeregister()
                 }
             }
         }
-
-        nodes.forEach { launch(dispatcher) { processNode(it) } }
     }
+
+    nodes.forEach {
+        phaser.register()
+        GlobalScope.launch(dispatcher) {
+            processNode(it)
+            phaser.arriveAndDeregister()
+        }
+    }
+
+    phaser.lockAndAwait()
+}
 
 
 fun pagerankAsync(nodes: List<Node>, dense: Float, epsilon: Float, dispatcher: CoroutineDispatcher) {

@@ -12,6 +12,8 @@ class IntPhaser {
 
     private val counter = atomic(0)
 
+    val count: Int get() = counter.value
+
     fun arriveAndDeregister() {
         if (counter.decrementAndGet() <= 0) {
             lock.withLock {

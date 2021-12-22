@@ -15,9 +15,12 @@ fun pagerankSequential(nodes: List<Node>, dense: Float, epsilon: Float) {
     while (queue.isNotEmpty()) {
         val recent = queue.poll()
 
-        val newRank = 1 - dense + dense * recent.outgoingEdges.map { it.impact }.sum()
+        val newRank = 1 - dense + dense * recent.incomingEdges.map { it.impact }.sum()
 
         if (abs(newRank - recent.rank) > epsilon) {
+
+            recent.rank = newRank
+
             recent.outgoingEdges.forEach { node ->
                 queue.remove(node)
                 queue.add(node)
