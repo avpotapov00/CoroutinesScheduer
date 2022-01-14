@@ -9,9 +9,9 @@ import kotlin.math.floor
 import kotlin.math.log2
 import kotlin.math.max
 
-class MyAdaptiveObim<T>(
+class AdaptiveObim<T>(
+    threads: Int,
     private val chunkSize: Int = 64,
-    private val threads: Int
 ) {
 
     private var counter = 0
@@ -82,7 +82,7 @@ class MyAdaptiveObim<T>(
         perItem.slowPopsLastPeriod++
 
         if (perItem.sinceLastFix > counter && (perItem.slowPopsLastPeriod / perItem.sinceLastFix.toDouble()) > 1.0 / chunkSize) {
-            merge(perItem)
+            merge()
         } else if (lmf > 0 && perItem.sinceLastFix > counter && perItem.popsFromSameQueue > 4 * chunkSize) {
             unmerge(perItem)
         }
@@ -164,7 +164,7 @@ class MyAdaptiveObim<T>(
         perItem.popsFromSameQueue = 0
     }
 
-    private fun merge(perItem: PerThreadStorage<T>) {
+    private fun merge() {
         perThreadStorage.withLockAll {
             var priosCreatedThisPeriod = 0
             var numPushesThisStep = 0
@@ -245,18 +245,20 @@ class MyAdaptiveObim<T>(
     }
 
     private fun updateLocal(perItem: PerThreadStorage<T>): Boolean {
-        if (perItem.lastMasterVersion != masterVersion.value) {
-            while (perItem.lastMasterVersion < masterVersion.value) {
+        masterLock.withLock {
+            if (perItem.lastMasterVersion != masterVersion.value) {
+                while (perItem.lastMasterVersion < masterVersion.value) {
 
-                val (deltaIndex, queue) = masterLog[perItem.lastMasterVersion]
+                    val (deltaIndex, queue) = masterLog[perItem.lastMasterVersion]
 
-                perItem.local[deltaIndex] = queue
+                    perItem.local[deltaIndex] = queue
 
-                perItem.lastMasterVersion++
+                    perItem.lastMasterVersion++
+                }
+                return true
             }
-            return true
+            return false
         }
-        return false
     }
 
 
@@ -267,8 +269,6 @@ class MyAdaptiveObim<T>(
         val lock = ReentrantLock()
 
         val local: TreeMap<DeltaIndex, Queue<T>> = TreeMap()
-
-        var lastQueueIndex: Int = 0
 
         var lastMasterVersion: Int = 0
 
