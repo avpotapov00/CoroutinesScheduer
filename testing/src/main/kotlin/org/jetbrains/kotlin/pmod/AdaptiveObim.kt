@@ -16,8 +16,6 @@ class MyAdaptiveObim<T>(
 
     private var counter = 0
 
-    private var numberOfPris: Int = 0
-
     private var lmf: Int = 0
 
     private var perThreadStorage = MultiThreadStorage(threads) { PerThreadStorage() }
@@ -286,11 +284,9 @@ class MyAdaptiveObim<T>(
 
         var slowPopsLastPeriod: Int = 0
 
-        // TODO: initial?
-        var maxPriority: Int = 0
+        var maxPriority: Int = Int.MIN_VALUE
 
-        // TODO: initial?
-        var minPriority: Int = 0
+        var minPriority: Int = Int.MAX_VALUE
 
         var currentIndex: DeltaIndex = DeltaIndex(0, 0)
 
