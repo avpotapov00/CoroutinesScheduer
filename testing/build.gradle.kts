@@ -22,6 +22,7 @@ dependencies {
 
     // external
     implementation("com.google.guava:guava:31.0.1-jre")
+    implementation("io.github.geniot:indexedtreemap:1.1")
 
     // testing
     testImplementation("org.openjdk.jmh:jmh-core:1.30")

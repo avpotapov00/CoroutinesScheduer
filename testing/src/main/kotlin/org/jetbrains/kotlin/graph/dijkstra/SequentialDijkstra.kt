@@ -6,7 +6,7 @@ import java.util.*
 
 fun shortestPathSequential(start: Node) {
     start.distance = 0
-    val q = PriorityQueue<Node>(NODE_DISTANCE_COMPARATOR)
+    val q = PriorityQueue(NODE_DISTANCE_COMPARATOR)
     q.add(start)
 
     while (q.isNotEmpty()) {
