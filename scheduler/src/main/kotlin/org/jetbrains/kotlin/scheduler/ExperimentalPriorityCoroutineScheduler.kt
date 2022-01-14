@@ -101,7 +101,7 @@ class ExperimentalPriorityCoroutineScheduler(
             var attempts = 0
             while (!terminated) {
 
-                // пытаемся взять из локальной очереди
+                // trying to get from local queue
                 var task = stealingMultiQueue.delete()
 
                 if (task != null) {
