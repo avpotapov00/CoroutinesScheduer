@@ -30,8 +30,6 @@ class AdaptiveObim<T>(
     fun push(value: T, priority: Int) {
         val perItem = perThreadStorage.get()
 
-        Thread.currentThread().id
-
         perItem.lock.withLock {
 
             perItem.maxPriority = perItem.maxPriority.coerceAtLeast(priority)
@@ -53,6 +51,7 @@ class AdaptiveObim<T>(
 
             if (index < perItem.currentIndex) {
                 perItem.popsFromSameQueue = 0
+
                 perItem.currentIndex = index
                 perItem.currentQueue = queue
             }
@@ -95,9 +94,8 @@ class AdaptiveObim<T>(
     }
 
     private fun regularPop(perItem: PerThreadStorage<T>): T? {
-        val (iterator, entry) = findTailIterator(perItem)
+        val (iterator, entry) = findTailIterator(perItem) ?: return null
 
-        if (!iterator.hasNext()) return null
         var nextEntry = entry as Map.Entry<DeltaIndex, Queue<T>>
 
         while (true) {
@@ -119,7 +117,7 @@ class AdaptiveObim<T>(
 
     private fun findTailIterator(
         perItem: PerThreadStorage<T>
-    ): Pair<MutableIterator<MutableMap.MutableEntry<DeltaIndex, Queue<T>>>, Map.Entry<DeltaIndex, Queue<T>>?> {
+    ): Pair<MutableIterator<MutableMap.MutableEntry<DeltaIndex, Queue<T>>>, Map.Entry<DeltaIndex, Queue<T>>?>? {
         val deltaIndex = DeltaIndex(0, 0)
 
         val iterator = perItem.local.iterator()
@@ -128,11 +126,12 @@ class AdaptiveObim<T>(
         while (iterator.hasNext()) {
             entry = iterator.next()
 
-            if (entry.key <= deltaIndex) {
-                break
+            if (entry.key >= deltaIndex) {
+                return Pair(iterator, entry)
             }
         }
-        return Pair(iterator, entry)
+
+        return null
     }
 
     private fun unmerge(perItem: PerThreadStorage<T>) {
@@ -237,6 +236,7 @@ class AdaptiveObim<T>(
 
             masterLog.add(deltaIndex to queue)
             masterVersion.incrementAndGet()
+            perThreadStorage.local[deltaIndex] = queue
 
             perThreadStorage.priosLastPeriod++
         }

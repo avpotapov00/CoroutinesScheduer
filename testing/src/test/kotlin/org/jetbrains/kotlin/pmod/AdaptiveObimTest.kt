@@ -10,14 +10,17 @@ import kotlin.test.assertEquals
 internal class AdaptiveObimTest {
 
     @RepeatedTest(30)
-    fun `should work as queue with same priority`() = withTestThread {
+    fun `should work as queue with same priority`() {
         val values = (0 until 100).shuffled()
+        val results = ConcurrentHashMap.newKeySet<Int>()
 
-        val pmod = AdaptiveObim<Int>(1)
+        withTestThread {
+            val pmod = AdaptiveObim<Int>(1)
 
-        values.forEach { pmod.push(it, 1) }
+            values.forEach { pmod.push(it, 1) }
 
-        val results = generateSequence { pmod.pop() }.toSet()
+            generateSequence { pmod.pop() }.forEach { results.add(it) }
+        }
 
         assertEquals(values.toSet(), results)
     }
@@ -26,17 +29,20 @@ internal class AdaptiveObimTest {
     fun `should work as queue with many priorities`() = withTestThread {
         val values = (0 until 100).shuffled()
         val random = Random(System.currentTimeMillis())
+        val results = ConcurrentHashMap.newKeySet<Int>()
 
-        val pmod = AdaptiveObim<Int>(1)
+        withTestThread {
+            val pmod = AdaptiveObim<Int>(1)
 
-        values.forEach { pmod.push(it, abs(random.nextInt()) % 100) }
+            values.forEach { pmod.push(it, abs(random.nextInt()) % 100) }
 
-        val results = generateSequence { pmod.pop() }.toSet()
+            generateSequence { pmod.pop() }.forEach { results.add(it) }
+        }
 
         assertEquals(values.toSet(), results)
     }
 
-    @Test
+    @RepeatedTest(30)
     fun `should process data from different threads`() {
         val values = (0 until 100).toList()
 

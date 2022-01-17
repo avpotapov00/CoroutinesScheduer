@@ -15,6 +15,17 @@ class TestThread(
 
 fun withTestThread(index: Int = 0, block: () -> Unit) {
     val thread = TestThread(block, index)
+
+    thread.uncaughtExceptionHandler = Handler()
     thread.start()
+
     thread.join()
+}
+
+private class Handler : Thread.UncaughtExceptionHandler {
+    override fun uncaughtException(t: Thread, e: Throwable) {
+        println("Exception")
+        throw e
+    }
+
 }
