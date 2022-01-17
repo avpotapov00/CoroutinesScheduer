@@ -5,6 +5,7 @@ import kotlinx.atomicfu.locks.ReentrantLock
 import kotlinx.atomicfu.locks.withLock
 import org.jetbrains.kotlin.smq.IndexedThread
 import java.util.*
+import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.math.floor
 import kotlin.math.log2
 import kotlin.math.max
@@ -127,7 +128,7 @@ class AdaptiveObim<T>(
         while (iterator.hasNext()) {
             entry = iterator.next()
 
-            if (entry.key < deltaIndex) {
+            if (entry.key <= deltaIndex) {
                 break
             }
         }
@@ -231,7 +232,7 @@ class AdaptiveObim<T>(
         var queue = perThreadStorage.local[deltaIndex]
 
         if (queue == null) {
-            queue = ArrayDeque()
+            queue = ConcurrentLinkedQueue()
             perThreadStorage.lastMasterVersion = masterVersion.value + 1
 
             masterLog.add(deltaIndex to queue)
