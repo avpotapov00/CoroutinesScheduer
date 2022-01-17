@@ -15,7 +15,7 @@ class AdaptiveObim<T>(
     private val chunkSize: Int = 64,
 ) {
 
-    private var counter = 0
+    private var counter = chunkSize
 
     private var lmf: Int = 0
 

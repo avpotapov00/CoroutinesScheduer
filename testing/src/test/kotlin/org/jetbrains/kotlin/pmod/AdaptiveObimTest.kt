@@ -6,6 +6,7 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
 import kotlin.random.Random
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 internal class AdaptiveObimTest {
 
@@ -59,6 +60,30 @@ internal class AdaptiveObimTest {
         }
 
         assertEquals(values.toSet(), result)
+    }
+
+    @RepeatedTest(30)
+    fun `should process data twice`() {
+        val values = (0 until 100).toList()
+        val random = Random(System.currentTimeMillis())
+        val results = ConcurrentHashMap.newKeySet<Int>()
+
+        val results2 = ConcurrentHashMap.newKeySet<Int>()
+
+        withTestThread {
+            val pmod = AdaptiveObim<Int>(1)
+
+            values.forEach { pmod.push(it, abs(random.nextInt()) % 1000) }
+            generateSequence { pmod.pop() }.forEach { results.add(it) }
+
+            assertTrue { pmod.pop() == null }
+
+            values.forEach { pmod.push(it, abs(random.nextInt()) % 100) }
+            generateSequence { pmod.pop() }.forEach { results2.add(it) }
+        }
+
+        assertEquals(values.toSet(), results)
+        assertEquals(values.toSet(), results2)
     }
 
 
