@@ -21,7 +21,7 @@ class AdaptiveObim<T>(
 
     private var perThreadStorage = MultiThreadStorage(threads) { PerThreadStorage() }
 
-    private val masterLog = ArrayList<Pair<DeltaIndex, Queue<T>>>()
+    private val masterLog = Array<Pair<DeltaIndex, Queue<T>>?>(10_000) { null }
 
     private val masterLock = ReentrantLock()
 
@@ -82,7 +82,7 @@ class AdaptiveObim<T>(
         perItem.slowPopsLastPeriod++
 
         if (perItem.sinceLastFix > counter && (perItem.slowPopsLastPeriod / perItem.sinceLastFix.toDouble()) > 1.0 / chunkSize) {
-            merge()
+            merge(perItem)
         } else if (lmf > 0 && perItem.sinceLastFix > counter && perItem.popsFromSameQueue > 4 * chunkSize) {
             unmerge(perItem)
         }
@@ -164,14 +164,14 @@ class AdaptiveObim<T>(
         perItem.popsFromSameQueue = 0
     }
 
-    private fun merge() {
+    private fun merge(perItem: PerThreadStorage<T>) {
         perThreadStorage.withLockAll {
-            var priosCreatedThisPeriod = 0
-            var numPushesThisStep = 0
-            var allPmodDeqCounts = 0
+            var priosCreatedThisPeriod = perItem.priosLastPeriod
+            var numPushesThisStep = perItem.pushesLastPeriod
+            var allPmodDeqCounts = perItem.pmodAllDeq
 
-            var minOfMin = Int.MAX_VALUE
-            var maxOfMax = Int.MIN_VALUE
+            var minOfMin = perItem.minPriority
+            var maxOfMax = perItem.maxPriority
 
             for (i in 0 until perThreadStorage.size) {
                 val other = perThreadStorage.getOther(i)
@@ -191,13 +191,15 @@ class AdaptiveObim<T>(
                 other.maxPriority = Int.MIN_VALUE
             }
 
-            val denominator = ((maxOfMax ushr lmf) - (minOfMin ushr lmf)).toDouble()
-            val ratio = (numPushesThisStep.toDouble()) / denominator
-            if (ratio < chunkSize / 2) {
-                val xx = (chunkSize.toDouble()) / (numPushesThisStep.toDouble() / denominator)
+            if (numPushesThisStep != 0) {
+                val denominator = ((maxOfMax ushr lmf) - (minOfMin ushr lmf)).toDouble()
+                val ratio = (numPushesThisStep.toDouble()) / denominator
+                if (ratio < chunkSize / 2) {
+                    val xx = (chunkSize.toDouble()) / (numPushesThisStep.toDouble() / denominator)
 
-                lmf += floor(log2(xx)).toInt()
-                counter *= 2
+                    lmf += floor(log2(xx)).toInt()
+                    counter *= 2
+                }
             }
         }
     }
@@ -234,8 +236,7 @@ class AdaptiveObim<T>(
             queue = ConcurrentLinkedQueue()
             perThreadStorage.lastMasterVersion = masterVersion.value + 1
 
-            masterLog.add(deltaIndex to queue)
-            masterVersion.incrementAndGet()
+            masterLog[masterVersion.getAndIncrement()] = (deltaIndex to queue)
             perThreadStorage.local[deltaIndex] = queue
 
             perThreadStorage.priosLastPeriod++
@@ -246,20 +247,18 @@ class AdaptiveObim<T>(
     }
 
     private fun updateLocal(perItem: PerThreadStorage<T>): Boolean {
-        masterLock.withLock {
-            if (perItem.lastMasterVersion != masterVersion.value) {
-                while (perItem.lastMasterVersion < masterVersion.value) {
+        if (perItem.lastMasterVersion != masterVersion.value) {
+            while (perItem.lastMasterVersion < masterVersion.value) {
 
-                    val (deltaIndex, queue) = masterLog[perItem.lastMasterVersion]
+                val (deltaIndex, queue) = masterLog[perItem.lastMasterVersion]!!
 
-                    perItem.local[deltaIndex] = queue
+                perItem.local[deltaIndex] = queue
 
-                    perItem.lastMasterVersion++
-                }
-                return true
+                perItem.lastMasterVersion++
             }
-            return false
+            return true
         }
+        return false
     }
 
 
