@@ -1,17 +1,47 @@
-package org.jetbrains.kotlin.graph.dijkstra
+package org.jetbrains.kotlin.pmod
 
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.kotlin.dispatcher.PriorityQueueCoroutineDispatcher
+import org.jetbrains.kotlin.graph.dijkstra.asyncDijkstra
+import org.jetbrains.kotlin.graph.dijkstra.shortestPathSequential
+import org.jetbrains.kotlin.graph.util.nodes.Node
 import org.jetbrains.kotlin.graph.util.nodes.clearNodes
 import org.jetbrains.kotlin.graph.util.nodes.randomConnectedGraph
-import org.jetbrains.kotlin.scheduler.ExperimentalPriorityCoroutineScheduler
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.RepeatedTest
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import kotlin.random.Random
 
-class DijkstraModelTest {
+class DijkstraPmodModelTest {
+
+    @RepeatedTest(30)
+    fun `test on simple graph`() = runBlocking {
+        val nodesList = List(3) { Node() }
+        val (a, b, c) = nodesList
+        a.addEdge(b, 2)
+        b.addEdge(c, 1)
+        a.addEdge(c, 4)
+
+        shortestPathSequential(a)
+        val seqRes = nodesList.map { it.distance }
+        clearNodes(nodesList)
+
+        println(seqRes)
+
+        val poolSize = 2
+        val scheduler = AdaptiveObimPriorityCoroutineScheduler(poolSize, startThreads = true)
+
+        PriorityQueueCoroutineDispatcher(scheduler).use {
+            asyncDijkstra(it, a)
+        }
+
+        val asyncRes = nodesList.map { it.distance }
+        println(asyncRes)
+        clearNodes(nodesList)
+
+        assertEquals(seqRes, asyncRes)
+    }
 
     @Timeout(100)
     @RepeatedTest(20)
@@ -43,7 +73,7 @@ class DijkstraModelTest {
         repeat(GRAPHS) { i ->
             val nodesList = randomConnectedGraph(nodes, edges)
             repeat(SEARCHES) { j ->
-                val scheduler = ExperimentalPriorityCoroutineScheduler(4, startThreads = true, pSteal = 0.02)
+                val scheduler = AdaptiveObimPriorityCoroutineScheduler(4, startThreads = true)
 
                 PriorityQueueCoroutineDispatcher(scheduler).use { dispatcher ->
                     val from = nodesList[r.nextInt(nodes)]
@@ -56,6 +86,7 @@ class DijkstraModelTest {
                     assertEquals(seqRes, parRes)
                 }
             }
+            println("Done")
         }
     }
 
