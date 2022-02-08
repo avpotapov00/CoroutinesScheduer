@@ -3,7 +3,7 @@ package org.jetbrains.kotlin.graph.pagerank
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.kotlin.dispatcher.PriorityQueueCoroutineDispatcher
-import org.jetbrains.kotlin.scheduler.ExperimentalPriorityCoroutineScheduler
+import org.jetbrains.kotlin.scheduler.SMQPriorityCoroutineScheduler
 import org.junit.jupiter.api.Test
 import org.openjdk.jmh.annotations.*
 import org.openjdk.jmh.runner.Runner
@@ -45,11 +45,11 @@ open class BenchmarkPagerankAsync {
 
         lateinit var dispatcher: CoroutineDispatcher
 
-        private lateinit var scheduler: ExperimentalPriorityCoroutineScheduler
+        private lateinit var scheduler: SMQPriorityCoroutineScheduler
 
         @Setup(Level.Trial)
         fun setup() {
-            scheduler = ExperimentalPriorityCoroutineScheduler(threads, startThreads = true, pSteal = pSteal)
+            scheduler = SMQPriorityCoroutineScheduler(threads, postponeThreadsStart = true, pSteal = pSteal)
             dispatcher = PriorityQueueCoroutineDispatcher(scheduler)
             nodes = readGraphNodes(sourcePath)
         }

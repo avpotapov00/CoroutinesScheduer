@@ -1,9 +1,6 @@
 package org.jetbrains.kotlin.graph.pagerank
 
-import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.runBlocking
-import org.jetbrains.kotlin.dispatcher.PriorityQueueCoroutineDispatcher
-import org.jetbrains.kotlin.scheduler.ExperimentalPriorityCoroutineScheduler
 import org.junit.jupiter.api.Test
 import org.openjdk.jmh.annotations.*
 import org.openjdk.jmh.runner.Runner

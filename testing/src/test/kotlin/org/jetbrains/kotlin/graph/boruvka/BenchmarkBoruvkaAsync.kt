@@ -5,10 +5,9 @@ import kotlinx.coroutines.runBlocking
 import org.jetbrains.kotlin.dispatcher.PriorityQueueCoroutineDispatcher
 import org.jetbrains.kotlin.graph.util.edges.Graph
 import org.jetbrains.kotlin.graph.util.readGraphEdges
-import org.jetbrains.kotlin.scheduler.ExperimentalPriorityCoroutineScheduler
+import org.jetbrains.kotlin.scheduler.SMQPriorityCoroutineScheduler
 import org.junit.jupiter.api.Test
 import org.openjdk.jmh.annotations.*
-import org.openjdk.jmh.infra.Blackhole
 import org.openjdk.jmh.runner.Runner
 import org.openjdk.jmh.runner.options.OptionsBuilder
 import java.util.concurrent.TimeUnit
@@ -53,11 +52,11 @@ open class BenchmarkBoruvkaAsync {
 
         lateinit var dispatcher: CoroutineDispatcher
 
-        private lateinit var scheduler: ExperimentalPriorityCoroutineScheduler
+        private lateinit var scheduler: SMQPriorityCoroutineScheduler
 
         @Setup(Level.Trial)
         fun setup() {
-            scheduler = ExperimentalPriorityCoroutineScheduler(threads, startThreads = true, pSteal = pSteal)
+            scheduler = SMQPriorityCoroutineScheduler(threads, postponeThreadsStart = true, pSteal = pSteal)
             dispatcher = PriorityQueueCoroutineDispatcher(scheduler)
             graph = readGraphEdges(sourcePath)
         }

@@ -3,7 +3,7 @@ package org.jetbrains.kotlin.common
 import kotlinx.coroutines.*
 import org.jetbrains.kotlin.dispatcher.PriorityQueueCoroutineDispatcher
 import org.jetbrains.kotlin.priority.Priority
-import org.jetbrains.kotlin.scheduler.ExperimentalPriorityCoroutineScheduler
+import org.jetbrains.kotlin.scheduler.SMQPriorityCoroutineScheduler
 import org.junit.jupiter.api.Timeout
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
@@ -18,7 +18,7 @@ class ActiveWaitingTest {
     @ParameterizedTest
     @ValueSource(ints = [3, 4, 5])
     fun `no active wait check`(threadsCount: Int) = runBlocking {
-        val scheduler = ExperimentalPriorityCoroutineScheduler(threadsCount, startThreads = false, pSteal = 0.05)
+        val scheduler = SMQPriorityCoroutineScheduler(threadsCount, postponeThreadsStart = false, pSteal = 0.05)
         val dispatcher = PriorityQueueCoroutineDispatcher(scheduler)
 
         val tasksCount = 100_000

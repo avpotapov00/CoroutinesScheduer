@@ -2,14 +2,14 @@ package org.jetbrains.kotlin.graph.pagerank
 
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.kotlin.dispatcher.PriorityQueueCoroutineDispatcher
-import org.jetbrains.kotlin.scheduler.ExperimentalPriorityCoroutineScheduler
+import org.jetbrains.kotlin.scheduler.SMQPriorityCoroutineScheduler
 import org.junit.jupiter.api.Test
 
 internal class AsyncPageRankKtTest {
 
     @Test
     fun `run async pagerank`() = runBlocking {
-        val scheduler = ExperimentalPriorityCoroutineScheduler(4, startThreads = true, pSteal = 0.05)
+        val scheduler = SMQPriorityCoroutineScheduler(4, postponeThreadsStart = true, pSteal = 0.05)
         val dispatcher = PriorityQueueCoroutineDispatcher(scheduler)
 
         val file = "src/test/resources/data/graphs/DCh-Miner_miner-disease-chemical.tsv"

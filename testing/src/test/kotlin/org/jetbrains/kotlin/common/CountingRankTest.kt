@@ -5,7 +5,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.kotlin.dispatcher.PriorityQueueCoroutineDispatcher
 import org.jetbrains.kotlin.priority.Priority
-import org.jetbrains.kotlin.scheduler.ExperimentalPriorityCoroutineScheduler
+import org.jetbrains.kotlin.scheduler.SMQPriorityCoroutineScheduler
 import org.jetbrains.kotlin.scheduler.PriorityCoroutineScheduler
 import org.junit.jupiter.api.RepeatedTest
 import java.util.concurrent.atomic.AtomicInteger
@@ -24,7 +24,7 @@ class CountingRankTest {
     fun `rank test with StealingMultiQueue one barrier`() = runBlocking {
         val counter = AtomicInteger(0)
 
-        val scheduler = ExperimentalPriorityCoroutineScheduler(4, startThreads = false, pSteal = 0.04)
+        val scheduler = SMQPriorityCoroutineScheduler(4, postponeThreadsStart = false, pSteal = 0.04)
         val dispatcher = PriorityQueueCoroutineDispatcher(scheduler)
 
         val tasksCount = 1_000_000

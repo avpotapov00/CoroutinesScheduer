@@ -4,34 +4,36 @@ import kotlinx.atomicfu.atomic
 
 class GlobalHeapWithStealingBufferQueue<E : Comparable<E>>(
     private val stealSize: Int
-): Stealable<E> {
+): StealingQueue<E> {
 
-    val size: Int get() = counter.value
+    val size: Int get() = _size.value
 
-    private val counter = atomic(0)
+    private val _size = atomic(0)
 
     private val queue = PriorityQueue<E>(4)
 
-    private val buffer = atomic<E?>(null)
+    private val topTask = atomic<E?>(null)
 
-    override fun top(): E? = buffer.value
+    override fun top(): E? = topTask.value
 
     @Synchronized
     fun add(task: E) {
-        counter.incrementAndGet()
+        _size.incrementAndGet()
         queue.insert(task)
-        buffer.value = queue.peek()
+        topTask.value = queue.peek()
     }
 
     @Synchronized
     override fun steal(): List<E> {
+        // TODO: Do we need to steal all elements from the global queue?
+        // TODO: I would steal 1 element instead.
         val result = mutableListOf<E>()
 
         for ((polled, _) in (0 until stealSize).withIndex()) {
             val element = queue.poll()
 
             if (element == null) {
-                counter.addAndGet(-polled)
+                _size.addAndGet(-polled)
                 return result
             }
 
@@ -40,6 +42,5 @@ class GlobalHeapWithStealingBufferQueue<E : Comparable<E>>(
 
         return result
     }
-
 }
 

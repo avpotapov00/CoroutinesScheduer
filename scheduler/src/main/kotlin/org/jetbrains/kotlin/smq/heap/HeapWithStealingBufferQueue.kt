@@ -22,15 +22,16 @@ class HeapWithStealingBufferQueue<E : Comparable<E>>(
     private val stealingSize = stealSize // TODO: do you need it?
 
     fun addLocal(task: E) {
-        q.add(task)
-        if (stolen) fillBuffer()
+        add(task)
+        if (state.value and bit != 0) fillBuffer()
     }
 
     fun extractTopLocal(): E? {
-        if (stolen) fillBuffer()
-        return q.extractTop()
+        if (state.value and bit != 0) fillBuffer()
+        return extractTop()
     }
 
+    // TODO: should the localQueue.top() access the stealing buffer?
     override fun top(): E? {
         while (true) {
             val currentState = state.value
@@ -53,7 +54,6 @@ class HeapWithStealingBufferQueue<E : Comparable<E>>(
             if (!state.compareAndSet(currentState, (state.value and reverseBit) or bit)) {
                 continue
             }
-
             return tasks
         }
     }
@@ -61,8 +61,8 @@ class HeapWithStealingBufferQueue<E : Comparable<E>>(
     private fun fillBuffer() { // stolen = true
         clearBuffer()
         for (i in 0 until stealSize) {
-            val task = q.extractTop() ?: break
-            stealingBuffer.add(task)
+            val task = extractTop() ?: break
+            addToBuffer(task)
         }
         state.value = ((state.value and reverseBit) + 1) and reverseBit
     }
@@ -101,13 +101,13 @@ private val Pair<Int, Boolean>.stolen: Boolean get() = second
 
 private val Pair<Int, Boolean>.epoch: Int get() = first
 
-class LocalQueue<E : Comparable<E>> {
+open class LocalQueue<E : Comparable<E>> {
 
     private val q = PriorityQueue<E>(4)
 
     private val _size = atomic(0)
 
-    @Synchronized
+    @Synchronized // we use synchronize here for the lock elision optimization
     fun extractTop(): E? {
         return q.poll()?.also {
             _size.decrementAndGet()
