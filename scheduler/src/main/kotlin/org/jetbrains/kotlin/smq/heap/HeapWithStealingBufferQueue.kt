@@ -1,24 +1,25 @@
 package org.jetbrains.kotlin.smq.heap
 
-import kotlinx.atomicfu.AtomicRef
+import kotlinx.atomicfu.AtomicInt
 import kotlinx.atomicfu.atomic
 import org.jetbrains.kotlin.smq.StealingBuffer
+import java.util.concurrent.atomic.AtomicReferenceArray
 
 class HeapWithStealingBufferQueue<E : Comparable<E>>(
     private val stealSize: Int
-): Stealable<E> {
+) : LocalQueue<E>(), StealingQueue<E> {
 
-    private val q = LocalQueue<E>()
+    private val bit = 1 shl 20
 
-    private var stealingBuffer = StealingBuffer<E>(stealSize)
+    private val reverseBit = bit - 1
 
-    private val state: AtomicRef<Pair<Int, Boolean>> = atomic(0 to true)
+    private val state: AtomicInt = atomic(0)
 
-    private val epoch get() = state.value.first
+    private val array = AtomicReferenceArray<E>(stealSize) // TODO: use plain array
 
-    private val stolen get() = state.value.second
+    private val bufferSize = atomic(0) // TODO: do you need it?
 
-    val size: Int get() = q.size
+    private val stealingSize = stealSize // TODO: do you need it?
 
     fun addLocal(task: E) {
         q.add(task)
@@ -33,10 +34,10 @@ class HeapWithStealingBufferQueue<E : Comparable<E>>(
     override fun top(): E? {
         while (true) {
             val currentState = state.value
-            if (currentState.stolen) return null
+            if (currentState and bit != 0) return null
 
-            val top = stealingBuffer.first()
-            if (currentState.epoch != epoch) continue
+            val top = firstFromBuffer()
+            if ((currentState and reverseBit) != (state.value and reverseBit)) continue
 
             return top
         }
@@ -45,11 +46,11 @@ class HeapWithStealingBufferQueue<E : Comparable<E>>(
     override fun steal(): List<E> {
         while (true) {
             val currentState = state.value
-            if (currentState.stolen) return emptyList()
+            if (currentState and bit != 0) return emptyList()
 
-            val tasks = stealingBuffer.read()
-
-            if (!state.compareAndSet(currentState, epoch to true)) {
+            val tasks = readFromBuffer()
+            //                                              without bit                flag = true
+            if (!state.compareAndSet(currentState, (state.value and reverseBit) or bit)) {
                 continue
             }
 
@@ -58,12 +59,40 @@ class HeapWithStealingBufferQueue<E : Comparable<E>>(
     }
 
     private fun fillBuffer() { // stolen = true
-        stealingBuffer.clear()
+        clearBuffer()
         for (i in 0 until stealSize) {
             val task = q.extractTop() ?: break
             stealingBuffer.add(task)
         }
-        state.value = (epoch + 1) to false
+        state.value = ((state.value and reverseBit) + 1) and reverseBit
+    }
+
+    private fun firstFromBuffer(): E? {
+        // TODO: Let's do not use expensive AtomicReferenceArray, use plain array instead.
+        return array.get(0)
+    }
+
+    private fun readFromBuffer(): List<E> {
+        val result = mutableListOf<E>()
+
+        for (index in 0 until stealingSize) {
+            val task = array.get(index) ?: return result
+            result.add(task)
+        }
+
+        return result
+    }
+
+    private fun clearBuffer() { // stolen = true
+        // TODO: Arrays.fill()
+        for (index in 0 until array.length()) {
+            array.set(index, null)
+        }
+        bufferSize.value = 0
+    }
+
+    private fun addToBuffer(task: E) { // stolen = true
+        array.set(bufferSize.getAndIncrement(), task)
     }
 
 }

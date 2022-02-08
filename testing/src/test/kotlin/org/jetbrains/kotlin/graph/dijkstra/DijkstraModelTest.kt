@@ -2,9 +2,10 @@ package org.jetbrains.kotlin.graph.dijkstra
 
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.kotlin.dispatcher.PriorityQueueCoroutineDispatcher
+import org.jetbrains.kotlin.graph.util.nodes.Node
 import org.jetbrains.kotlin.graph.util.nodes.clearNodes
 import org.jetbrains.kotlin.graph.util.nodes.randomConnectedGraph
-import org.jetbrains.kotlin.scheduler.ExperimentalPriorityCoroutineScheduler
+import org.jetbrains.kotlin.scheduler.SMQPriorityCoroutineScheduler
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.RepeatedTest
 import org.junit.jupiter.api.Test
@@ -12,6 +13,27 @@ import org.junit.jupiter.api.Timeout
 import kotlin.random.Random
 
 class DijkstraModelTest {
+
+    @Test
+    fun simpleTest()  = runBlocking {
+        val nodesList = List(3) { Node() }
+        val (a, b, c) = nodesList
+
+        a.addEdge(b, 2)
+        b.addEdge(c, 1)
+        a.addEdge(c, 4)
+
+        val scheduler = SMQPriorityCoroutineScheduler(poolSize = 1, postponeThreadsStart = false, pSteal = 0.02)
+
+        println("Start")
+        PriorityQueueCoroutineDispatcher(scheduler).use { dispatcher ->
+            asyncDijkstra(dispatcher, a)
+        }
+
+        assertEquals(0, a.distance)
+        assertEquals(2, b.distance)
+        assertEquals(3, c.distance)
+    }
 
     @Timeout(100)
     @RepeatedTest(20)
@@ -43,7 +65,7 @@ class DijkstraModelTest {
         repeat(GRAPHS) { i ->
             val nodesList = randomConnectedGraph(nodes, edges)
             repeat(SEARCHES) { j ->
-                val scheduler = ExperimentalPriorityCoroutineScheduler(4, startThreads = true, pSteal = 0.02)
+                val scheduler = SMQPriorityCoroutineScheduler(4, pSteal = 0.02)
 
                 PriorityQueueCoroutineDispatcher(scheduler).use { dispatcher ->
                     val from = nodesList[r.nextInt(nodes)]

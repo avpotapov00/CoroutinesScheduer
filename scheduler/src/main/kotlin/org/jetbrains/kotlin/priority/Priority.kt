@@ -1,5 +1,6 @@
 package org.jetbrains.kotlin.priority
 
+import kotlinx.coroutines.CoroutineScope
 import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
 

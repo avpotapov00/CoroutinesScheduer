@@ -11,8 +11,6 @@ class StealingMultiQueue<E : Comparable<E>>(
     private val threads: Int
 ) {
 
-    private val random = Random(0)
-
     private val globalQueue = GlobalHeapWithStealingBufferQueue<E>(stealSize)
 
     private val queues = Array(threads) { HeapWithStealingBufferQueue<E>(stealSize) }
@@ -61,7 +59,7 @@ class StealingMultiQueue<E : Comparable<E>>(
         return stolen[0]
     }
 
-    private fun shouldSteal() = random.nextDouble() < pSteal
+    private fun shouldSteal() = ThreadLocalRandom.current().nextDouble() < pSteal
 
     private fun trySteal(): E? {
         // Choose a random queue and check whether
