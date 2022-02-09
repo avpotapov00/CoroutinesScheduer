@@ -1,8 +1,7 @@
-package org.jetbrains.kotlin.smq.heap
+package org.jetbrains.kotlin.generic.smq.heap
 
 import kotlinx.atomicfu.AtomicInt
 import kotlinx.atomicfu.atomic
-import org.jetbrains.kotlin.smq.StealingBuffer
 import java.util.concurrent.atomic.AtomicReferenceArray
 
 class HeapWithStealingBufferQueue<E : Comparable<E>>(
@@ -19,8 +18,6 @@ class HeapWithStealingBufferQueue<E : Comparable<E>>(
 
     private val bufferSize = atomic(0) // TODO: do you need it?
 
-    private val stealingSize = stealSize // TODO: do you need it?
-
     fun addLocal(task: E) {
         add(task)
         if (state.value and bit != 0) fillBuffer()
@@ -31,8 +28,7 @@ class HeapWithStealingBufferQueue<E : Comparable<E>>(
         return extractTop()
     }
 
-    // TODO: should the localQueue.top() access the stealing buffer?
-    override fun top(): E? {
+    override val top: E? get() {
         while (true) {
             val currentState = state.value
             if (currentState and bit != 0) return null
@@ -75,7 +71,7 @@ class HeapWithStealingBufferQueue<E : Comparable<E>>(
     private fun readFromBuffer(): List<E> {
         val result = mutableListOf<E>()
 
-        for (index in 0 until stealingSize) {
+        for (index in 0 until stealSize) {
             val task = array.get(index) ?: return result
             result.add(task)
         }
@@ -96,10 +92,6 @@ class HeapWithStealingBufferQueue<E : Comparable<E>>(
     }
 
 }
-
-private val Pair<Int, Boolean>.stolen: Boolean get() = second
-
-private val Pair<Int, Boolean>.epoch: Int get() = first
 
 open class LocalQueue<E : Comparable<E>> {
 

@@ -1,8 +1,8 @@
 package org.jetbrains.kotlin.pmod
 
 import kotlinx.coroutines.Runnable
-import org.jetbrains.kotlin.scheduler.PriorityCoroutineScheduler
-import org.jetbrains.kotlin.smq.IndexedThread
+import org.jetbrains.kotlin.generic.scheduler.PriorityCoroutineScheduler
+import org.jetbrains.kotlin.generic.smq.IndexedThread
 
 class AdaptiveObimPriorityCoroutineScheduler(
     poolSize: Int,

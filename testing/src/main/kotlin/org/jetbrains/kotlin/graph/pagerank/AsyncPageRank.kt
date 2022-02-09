@@ -4,7 +4,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import org.jetbrains.kotlin.graph.util.IntPhaser
-import org.jetbrains.kotlin.priority.Priority
+import org.jetbrains.kotlin.generic.priority.Priority
 import kotlin.math.abs
 
 fun pagerankAsyncPush(nodes: List<Node>, dense: Float, epsilon: Float, dispatcher: CoroutineDispatcher) {

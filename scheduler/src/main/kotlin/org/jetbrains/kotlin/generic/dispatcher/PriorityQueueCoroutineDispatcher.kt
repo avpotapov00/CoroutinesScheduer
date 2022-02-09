@@ -1,11 +1,11 @@
-package org.jetbrains.kotlin.dispatcher
+package org.jetbrains.kotlin.generic.dispatcher
 
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.Runnable
 import kotlinx.coroutines.launch
-import org.jetbrains.kotlin.priority.Priority
-import org.jetbrains.kotlin.scheduler.PriorityCoroutineScheduler
+import org.jetbrains.kotlin.generic.priority.Priority
+import org.jetbrains.kotlin.generic.scheduler.PriorityCoroutineScheduler
 import java.io.Closeable
 import kotlin.coroutines.CoroutineContext
 

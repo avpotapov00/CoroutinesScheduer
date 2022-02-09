@@ -3,7 +3,7 @@ package org.jetbrains.kotlin.pmod
 import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.locks.ReentrantLock
 import kotlinx.atomicfu.locks.withLock
-import org.jetbrains.kotlin.smq.IndexedThread
+import org.jetbrains.kotlin.generic.smq.IndexedThread
 import java.util.*
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.math.floor

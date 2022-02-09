@@ -1,4 +1,4 @@
-package org.jetbrains.kotlin.priority
+package org.jetbrains.kotlin.generic.priority
 
 import kotlinx.coroutines.CoroutineScope
 import kotlin.coroutines.AbstractCoroutineContextElement

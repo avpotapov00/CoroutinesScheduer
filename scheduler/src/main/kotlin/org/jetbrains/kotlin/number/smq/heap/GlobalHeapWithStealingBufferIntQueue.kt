@@ -1,33 +1,33 @@
-package org.jetbrains.kotlin.smq.heap
+package org.jetbrains.kotlin.number.smq.heap
 
 import kotlinx.atomicfu.atomic
 
-class GlobalHeapWithStealingBufferQueue<E : Comparable<E>>(
+class GlobalHeapWithStealingBufferIntQueue(
     private val stealSize: Int
-): StealingQueue<E> {
+): StealingIntQueue {
 
     val size: Int get() = _size.value
 
     private val _size = atomic(0)
 
-    private val queue = PriorityQueue<E>(4)
+    private val queue = PriorityIntQueue(4)
 
-    private val topTask = atomic<E?>(null)
+    private val topTask = atomic<Int?>(null)
 
-    override fun top(): E? = topTask.value
+    override val top: Int? get() = topTask.value
 
     @Synchronized
-    fun add(task: E) {
+    fun add(task: Int) {
         _size.incrementAndGet()
         queue.insert(task)
         topTask.value = queue.peek()
     }
 
     @Synchronized
-    override fun steal(): List<E> {
+    override fun steal(): List<Int> {
         // TODO: Do we need to steal all elements from the global queue?
         // TODO: I would steal 1 element instead.
-        val result = mutableListOf<E>()
+        val result = mutableListOf<Int>()
 
         for ((polled, _) in (0 until stealSize).withIndex()) {
             val element = queue.poll()
@@ -43,4 +43,3 @@ class GlobalHeapWithStealingBufferQueue<E : Comparable<E>>(
         return result
     }
 }
-

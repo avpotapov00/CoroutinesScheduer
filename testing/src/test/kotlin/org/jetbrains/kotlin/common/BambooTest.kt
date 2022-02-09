@@ -1,9 +1,9 @@
 package org.jetbrains.kotlin.common
 
 import kotlinx.coroutines.*
-import org.jetbrains.kotlin.dispatcher.PriorityQueueCoroutineDispatcher
-import org.jetbrains.kotlin.priority.Priority
-import org.jetbrains.kotlin.scheduler.SMQPriorityCoroutineScheduler
+import org.jetbrains.kotlin.generic.dispatcher.PriorityQueueCoroutineDispatcher
+import org.jetbrains.kotlin.generic.priority.Priority
+import org.jetbrains.kotlin.generic.scheduler.SMQPriorityCoroutineScheduler
 import org.junit.jupiter.api.RepeatedTest
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.CoroutineContext
@@ -13,7 +13,7 @@ class BambooTest {
 
     @RepeatedTest(10)
     fun `bamboo thread switching test smq`() = runBlocking {
-        val scheduler = SMQPriorityCoroutineScheduler(4, postponeThreadsStart = false, pSteal = 0.04)
+        val scheduler = SMQPriorityCoroutineScheduler(4, postponeThreadsStart = true, pSteal = 0.04)
         val dispatcher = PriorityQueueCoroutineDispatcher(scheduler)
 
         val threadSwitches = AtomicInteger()

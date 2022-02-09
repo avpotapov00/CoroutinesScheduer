@@ -1,6 +1,6 @@
 package org.jetbrains.kotlin.pmod
 
-import org.jetbrains.kotlin.smq.IndexedThread
+import org.jetbrains.kotlin.generic.smq.IndexedThread
 
 class TestThread(
     private val block: () -> Unit,

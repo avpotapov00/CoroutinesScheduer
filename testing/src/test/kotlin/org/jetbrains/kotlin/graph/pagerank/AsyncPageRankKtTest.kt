@@ -1,8 +1,8 @@
 package org.jetbrains.kotlin.graph.pagerank
 
 import kotlinx.coroutines.runBlocking
-import org.jetbrains.kotlin.dispatcher.PriorityQueueCoroutineDispatcher
-import org.jetbrains.kotlin.scheduler.SMQPriorityCoroutineScheduler
+import org.jetbrains.kotlin.generic.dispatcher.PriorityQueueCoroutineDispatcher
+import org.jetbrains.kotlin.generic.scheduler.SMQPriorityCoroutineScheduler
 import org.junit.jupiter.api.Test
 
 internal class AsyncPageRankKtTest {

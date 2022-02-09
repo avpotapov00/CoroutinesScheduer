@@ -6,7 +6,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import org.jetbrains.kotlin.graph.util.IntPhaser
 import org.jetbrains.kotlin.graph.util.nodes.Node
-import org.jetbrains.kotlin.priority.Priority
+import org.jetbrains.kotlin.generic.priority.Priority
 
 suspend fun asyncDijkstra(dispatcher: CoroutineDispatcher, start: Node) = coroutineScope {
 

@@ -1,4 +1,4 @@
-package org.jetbrains.kotlin.smq.heap
+package org.jetbrains.kotlin.generic.smq.heap
 
 @Suppress("UNCHECKED_CAST")
 class PriorityQueue<T : Comparable<T>>(

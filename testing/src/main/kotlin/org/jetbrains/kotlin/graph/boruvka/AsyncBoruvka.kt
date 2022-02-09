@@ -2,7 +2,7 @@ package org.jetbrains.kotlin.graph.boruvka
 
 import kotlinx.coroutines.*
 import org.jetbrains.kotlin.graph.util.edges.Edge
-import org.jetbrains.kotlin.priority.Priority
+import org.jetbrains.kotlin.generic.priority.Priority
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReferenceArray
 

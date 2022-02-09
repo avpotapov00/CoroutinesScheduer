@@ -1,13 +1,13 @@
-package org.jetbrains.kotlin.scheduler
+package org.jetbrains.kotlin.generic.scheduler
 
 import kotlinx.atomicfu.AtomicArray
 import kotlinx.atomicfu.AtomicRef
 import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.atomicArrayOfNulls
 import kotlinx.coroutines.Runnable
-import org.jetbrains.kotlin.priority.PriorityTask
-import org.jetbrains.kotlin.smq.IndexedThread
-import org.jetbrains.kotlin.smq.StealingMultiQueue
+import org.jetbrains.kotlin.generic.priority.PriorityTask
+import org.jetbrains.kotlin.generic.smq.IndexedThread
+import org.jetbrains.kotlin.generic.smq.StealingMultiQueue
 import java.io.Closeable
 import java.util.concurrent.locks.LockSupport
 import kotlin.random.Random

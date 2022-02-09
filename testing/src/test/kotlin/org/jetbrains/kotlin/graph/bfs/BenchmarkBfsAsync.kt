@@ -3,11 +3,11 @@ package org.jetbrains.kotlin.graph.bfs
 
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.runBlocking
-import org.jetbrains.kotlin.dispatcher.PriorityQueueCoroutineDispatcher
+import org.jetbrains.kotlin.generic.dispatcher.PriorityQueueCoroutineDispatcher
 import org.jetbrains.kotlin.graph.util.nodes.Node
 import org.jetbrains.kotlin.graph.util.nodes.clearNodes
 import org.jetbrains.kotlin.graph.util.readGraphNodesBiDirect
-import org.jetbrains.kotlin.scheduler.SMQPriorityCoroutineScheduler
+import org.jetbrains.kotlin.generic.scheduler.SMQPriorityCoroutineScheduler
 import org.junit.jupiter.api.Test
 import org.openjdk.jmh.annotations.*
 import org.openjdk.jmh.runner.Runner

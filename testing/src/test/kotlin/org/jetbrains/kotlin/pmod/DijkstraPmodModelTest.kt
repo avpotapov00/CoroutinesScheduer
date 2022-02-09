@@ -1,7 +1,7 @@
 package org.jetbrains.kotlin.pmod
 
 import kotlinx.coroutines.runBlocking
-import org.jetbrains.kotlin.dispatcher.PriorityQueueCoroutineDispatcher
+import org.jetbrains.kotlin.generic.dispatcher.PriorityQueueCoroutineDispatcher
 import org.jetbrains.kotlin.graph.dijkstra.asyncDijkstra
 import org.jetbrains.kotlin.graph.dijkstra.shortestPathSequential
 import org.jetbrains.kotlin.graph.util.nodes.Node
