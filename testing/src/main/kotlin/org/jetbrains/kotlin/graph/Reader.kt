@@ -53,7 +53,8 @@ class GraphReader {
         check(line.startsWith("p sp "))
         val count = line.split(" ")[2].toInt()
 
-        val nodes = Array(count) { IntNode() }
+        val nodes = ArrayList<IntNode>(count)
+        repeat((0 until count).count()) { nodes.add(IntNode()) }
 
         do {
             line = reader.readLine()
@@ -71,7 +72,7 @@ class GraphReader {
             line = reader.readLine()
         }
 
-        return nodes.toList()
+        return nodes
     }
 
 }

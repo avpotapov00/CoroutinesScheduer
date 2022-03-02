@@ -4,15 +4,18 @@ import org.jetbrains.kotlin.graph.GraphReader
 import org.jetbrains.kotlin.number.scheduler.PriorityLongDijkstraScheduler
 
 fun main() {
-    val path = "E:\\Diploma\\dm-examples-master\\CoroutinesScheduer\\testing\\src\\jmh\\resources\\USA-road-d.W.gr"
-    val nodes  = GraphReader().readGraphNodesBiDirectFromFile(path)
+    val path = "/USA-road-d.W.gr"
+    val nodes = GraphReader().readGraphNodesBiDirect(path)
 
     println("Started!")
+
     PriorityLongDijkstraScheduler(
         nodes,
         startIndex = 0,
         poolSize = 4,
-        stealSize = 8,
+        stealSize = 4,
         pSteal = 0.25
-    ).use { it.waitForTermination() }
+    ).use {
+        it.waitForTermination()
+    }
 }
