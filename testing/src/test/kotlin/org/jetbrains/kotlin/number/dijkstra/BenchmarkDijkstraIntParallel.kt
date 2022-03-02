@@ -1,12 +1,9 @@
-//package org.jetbrains.kotlin.graph.dijkstra
+//package org.jetbrains.kotlin.number.dijkstra
 //
-//import kotlinx.coroutines.CoroutineDispatcher
-//import kotlinx.coroutines.runBlocking
-//import org.jetbrains.kotlin.generic.dispatcher.PriorityQueueCoroutineDispatcher
+//import org.jetbrains.kotlin.graph.dijkstra.shortestPathParallel
 //import org.jetbrains.kotlin.graph.util.nodes.Node
 //import org.jetbrains.kotlin.graph.util.nodes.clearNodes
 //import org.jetbrains.kotlin.graph.util.readGraphNodesBiDirect
-//import org.jetbrains.kotlin.generic.scheduler.SMQPriorityCoroutineScheduler
 //import org.junit.jupiter.api.Test
 //import org.openjdk.jmh.annotations.*
 //import org.openjdk.jmh.runner.Runner
@@ -19,20 +16,20 @@
 //@Threads(1)
 //@Fork(1)
 //@OutputTimeUnit(TimeUnit.SECONDS)
-//open class BenchmarkDijkstraAsync {
+//open class BenchmarkDijkstraIntParallel {
 //
 //    @Benchmark
-//    fun asyncDijkstraTest(config: Config) = runBlocking {
-//        asyncDijkstra(config.dispatcher, config.nodes[0])
-//    }
-//
-//    @Benchmark
-//    fun asyncDijkstraGlobalScopeTest(config: Config) = runBlocking {
-//        asyncDijkstraGlobalScope(config.dispatcher, config.nodes[0])
+//    fun testSequence(config: Config)  {
+//        shortestPathParallel(config.nodes[0], workers = config.threads)
 //    }
 //
 //    @State(Scope.Thread)
 //    open class Config {
+//
+//        @Param(
+//            "1", "2", "3", "4", "5", "6"
+//        )
+//        var threads: Int = 0
 //
 //        @Param(
 //            "src/test/resources/data/graphs/DCh-Miner_miner-disease-chemical.tsv",
@@ -41,24 +38,11 @@
 //        )
 //        lateinit var sourcePath: String
 //
-//        @Param(
-//            "1", "2", "3", "4", "5", "6"
-//        )
-//        private var threads: Int = 0
-//
-//        @Param("0.1" ,"0.2", "0.04", "0.016")
-//        private var pSteal = 0.1
-//
 //        lateinit var nodes: List<Node>
 //
-//        lateinit var dispatcher: CoroutineDispatcher
-//
-//        private lateinit var scheduler: SMQPriorityCoroutineScheduler
 //
 //        @Setup(Level.Trial)
 //        fun setup() {
-//            scheduler = SMQPriorityCoroutineScheduler(threads, postponeThreadsStart = true, pSteal = pSteal)
-//            dispatcher = PriorityQueueCoroutineDispatcher(scheduler)
 //            nodes = readGraphNodesBiDirect(sourcePath)
 //        }
 //
@@ -67,18 +51,13 @@
 //            clearNodes(nodes)
 //        }
 //
-//        @TearDown(Level.Trial)
-//        fun closeDispatcher() {
-//            scheduler.close()
-//        }
-//
 //    }
 //
 //
 //    @Test
 //    fun `run benchmark`() {
 //        val options = OptionsBuilder()
-//            .include(BenchmarkDijkstraAsync::class.java.simpleName)
+//            .include(BenchmarkDijkstraIntParallel::class.java.simpleName)
 //            .jvmArgs("-Xms4096M", "-Xmx6144M")
 //            .build()
 //

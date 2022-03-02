@@ -2,8 +2,10 @@ package org.jetbrains.kotlin.generic.smq.heap
 
 import kotlinx.atomicfu.AtomicInt
 import kotlinx.atomicfu.atomic
+import java.util.*
 import java.util.concurrent.atomic.AtomicReferenceArray
 
+@SuppressWarnings("UNCHECKED_CAST")
 class HeapWithStealingBufferQueue<E : Comparable<E>>(
     private val stealSize: Int
 ) : LocalQueue<E>(), StealingQueue<E> {
@@ -14,7 +16,7 @@ class HeapWithStealingBufferQueue<E : Comparable<E>>(
 
     private val state: AtomicInt = atomic(0)
 
-    private val array = AtomicReferenceArray<E>(stealSize) // TODO: use plain array
+    private val array = arrayOfNulls<Any>(stealSize) // TODO: use plain array
 
     private val bufferSize = atomic(0) // TODO: do you need it?
 
@@ -65,30 +67,27 @@ class HeapWithStealingBufferQueue<E : Comparable<E>>(
 
     private fun firstFromBuffer(): E? {
         // TODO: Let's do not use expensive AtomicReferenceArray, use plain array instead.
-        return array.get(0)
+        return array[0] as E?
     }
 
     private fun readFromBuffer(): List<E> {
         val result = mutableListOf<E>()
 
         for (index in 0 until stealSize) {
-            val task = array.get(index) ?: return result
-            result.add(task)
+            val task = array[index] ?: return result
+            result.add(task as E)
         }
 
         return result
     }
 
     private fun clearBuffer() { // stolen = true
-        // TODO: Arrays.fill()
-        for (index in 0 until array.length()) {
-            array.set(index, null)
-        }
+        Arrays.fill(array, null)
         bufferSize.value = 0
     }
 
     private fun addToBuffer(task: E) { // stolen = true
-        array.set(bufferSize.getAndIncrement(), task)
+        array[bufferSize.getAndIncrement()] = task
     }
 
 }

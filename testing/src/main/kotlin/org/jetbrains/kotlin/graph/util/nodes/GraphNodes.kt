@@ -1,6 +1,7 @@
 package org.jetbrains.kotlin.graph.util.nodes
 
 import kotlinx.atomicfu.atomic
+import org.jetbrains.kotlin.graph.dijkstra.IntNode
 import java.util.*
 import kotlin.Comparator
 import kotlin.collections.ArrayList

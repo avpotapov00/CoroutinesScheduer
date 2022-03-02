@@ -1,22 +1,21 @@
 package org.jetbrains.kotlin.number.smq.heap
 
-@Suppress("UNCHECKED_CAST")
-class PriorityIntQueue(
+class PriorityLongQueue(
     private val arity: Int,
     initialCapacity: Int = DEFAULT_INITIAL_CAPACITY,
 ) {
     private var maxIndex: Int = -1
-    private var queue: IntArray = IntArray(initialCapacity)
+    private var queue: LongArray = LongArray(initialCapacity)
 
 
-    fun insert(element: Int) {
+    fun insert(element: Long) {
         grow()
         swim(element, maxIndex)
     }
 
-    fun poll(): Int? {
+    fun poll(): Long {
         if (maxIndex <= -1) {
-            return null
+            return Long.MIN_VALUE
         }
         val root = queue[0]
         val last = queue[maxIndex]
@@ -26,9 +25,9 @@ class PriorityIntQueue(
         return root
     }
 
-    fun peek(): Int? {
+    fun peek(): Long {
         return if (maxIndex == -1) {
-            null
+            Long.MIN_VALUE
         } else {
             queue[0]
         }
@@ -65,7 +64,7 @@ class PriorityIntQueue(
         return minChild
     }
 
-    private fun sink(value: Int) {
+    private fun sink(value: Long) {
         var index = 0
         var minChild = getMinChild(index)
 
@@ -78,7 +77,7 @@ class PriorityIntQueue(
         queue[index] = value
     }
 
-    private fun swim(value: Int, fromIndex: Int) {
+    private fun swim(value: Long, fromIndex: Int) {
         var index = fromIndex
         var parent = getParent(index)
 

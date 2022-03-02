@@ -6,7 +6,7 @@ import org.jetbrains.kotlin.number.smq.heap.HeapWithStealingBufferIntQueue
 import org.jetbrains.kotlin.number.smq.heap.StealingIntQueue
 import java.util.concurrent.ThreadLocalRandom
 
-class StealingIntMultiQueue (
+open class StealingIntMultiQueue (
     stealSize: Int,
     private val pSteal: Double,
     threads: Int
@@ -16,20 +16,20 @@ class StealingIntMultiQueue (
 
     private val queues = Array(threads) { HeapWithStealingBufferIntQueue(stealSize) }
 
-    private val stolenTasks = ThreadLocal.withInitial { ArrayDeque<Int>(stealSize) }
+    private val stolenTasks = ThreadLocal.withInitial { ArrayDeque<Long>(stealSize) }
 
     // your size + the size of the buffer for theft + the size of the global queue
     fun size() = queues[currThread()].size + stolenTasks.get().size + globalQueue.size
 
-    fun insertGlobal(task: Int) {
+    fun insertGlobal(task: Long) {
         globalQueue.add(task)
     }
 
-    fun insert(task: Int) {
+    fun insert(task: Long) {
         queues[currThread()].addLocal(task)
     }
 
-    fun delete(): Int? {
+    fun delete(): Long {
         // Do we have previously stolen tasks ?
         if (stolenTasks.get().isNotEmpty()) {
             return stolenTasks.get().removeFirst()
@@ -37,23 +37,23 @@ class StealingIntMultiQueue (
         // Should we steal ?
         if (shouldSteal()) {
             val task = trySteal()
-            if (task != null) {
+            if (task != Long.MIN_VALUE) {
                 return task
             }
         }
         // Try to retrieve the top task
         // from the thread - local queue
         val task = queues[currThread()].extractTopLocal()
-        if (task != null) {
+        if (task != Long.MIN_VALUE) {
             return task
         }
         // The local queue is empty , try to steal
         return trySteal()
     }
 
-    fun stealAndDeleteFromGlobal(): Int? {
+    fun stealAndDeleteFromGlobal(): Long {
         val stolen = globalQueue.steal()
-        if (stolen.isEmpty()) return null // failed
+        if (stolen.isEmpty()) return Long.MIN_VALUE // failed
         // Return the first task and add the others
         // to the thread - local buffer of stolen ones
 
@@ -65,7 +65,7 @@ class StealingIntMultiQueue (
 
     private fun shouldSteal() = ThreadLocalRandom.current().nextDouble() < pSteal
 
-    private fun trySteal(): Int? {
+    private fun trySteal(): Long {
         // Choose a random queue and check whether
         // its top task has higher priority
 
@@ -73,17 +73,17 @@ class StealingIntMultiQueue (
         val ourTop = queues[currThread()].top
         val otherTop = otherQueue.top
 
-        if (ourTop == null || otherTop == null || otherTop === ourTop || otherTop < ourTop) {
+        if (ourTop == Long.MIN_VALUE || otherTop == Long.MIN_VALUE || otherTop == Long.MIN_VALUE || otherTop < ourTop) {
             // Try to steal a better task !
             val stolen = otherQueue.steal()
-            if (stolen.isEmpty()) return null // failed
+            if (stolen.isEmpty()) return Long.MIN_VALUE // failed
             // Return the first task and add the others
             // to the thread - local buffer of stolen ones
             stolenTasks.get().addAll(stolen.subList(1, stolen.size))
             return stolen[0]
         }
 
-        return null
+        return Long.MIN_VALUE
     }
 
     private fun getQueueToSteal(): StealingIntQueue {

@@ -2,7 +2,7 @@ package org.jetbrains.kotlin.number.smq.heap
 
 import kotlinx.atomicfu.AtomicInt
 import kotlinx.atomicfu.atomic
-import java.util.concurrent.atomic.AtomicReferenceArray
+import java.util.Arrays
 
 class HeapWithStealingBufferIntQueue(
     private val stealSize: Int
@@ -14,24 +14,24 @@ class HeapWithStealingBufferIntQueue(
 
     private val state: AtomicInt = atomic(0)
 
-    private val array = AtomicReferenceArray<Int>(stealSize) // TODO: use plain array
+    private val array = LongArray(stealSize)
 
     private val bufferSize = atomic(0) // TODO: do you need it?
 
-    fun addLocal(task: Int) {
+    fun addLocal(task: Long) {
         add(task)
         if (state.value and bit != 0) fillBuffer()
     }
 
-    fun extractTopLocal(): Int? {
+    fun extractTopLocal(): Long {
         if (state.value and bit != 0) fillBuffer()
         return extractTop()
     }
 
-    override val top: Int? get() {
+    override val top: Long get() {
         while (true) {
             val currentState = state.value
-            if (currentState and bit != 0) return null
+            if (currentState and bit != 0) return Long.MIN_VALUE
 
             val top = firstFromBuffer()
             if ((currentState and reverseBit) != (state.value and reverseBit)) continue
@@ -40,7 +40,7 @@ class HeapWithStealingBufferIntQueue(
         }
     }
 
-    override fun steal(): List<Int> {
+    override fun steal(): List<Long> {
         while (true) {
             val currentState = state.value
             if (currentState and bit != 0) return emptyList()
@@ -63,16 +63,19 @@ class HeapWithStealingBufferIntQueue(
         state.value = ((state.value and reverseBit) + 1) and reverseBit
     }
 
-    private fun firstFromBuffer(): Int? {
+    private fun firstFromBuffer(): Long {
         // TODO: Let's do not use expensive AtomicReferenceArray, use plain array instead.
-        return array.get(0)
+        return array[0]
     }
 
-    private fun readFromBuffer(): List<Int> {
-        val result = mutableListOf<Int>()
+    private fun readFromBuffer(): List<Long> {
+        val result = mutableListOf<Long>()
 
         for (index in 0 until stealSize) {
-            val task = array.get(index) ?: return result
+            val task = array[index]
+            if (task == Long.MIN_VALUE) {
+                return result
+            }
             result.add(task)
         }
 
@@ -80,34 +83,33 @@ class HeapWithStealingBufferIntQueue(
     }
 
     private fun clearBuffer() { // stolen = true
-        // TODO: Arrays.fill()
-        for (index in 0 until array.length()) {
-            array.set(index, null)
-        }
+        Arrays.fill(array, Long.MIN_VALUE)
         bufferSize.value = 0
     }
 
-    private fun addToBuffer(task: Int) { // stolen = true
-        array.set(bufferSize.getAndIncrement(), task)
+    private fun addToBuffer(task: Long) { // stolen = true
+        array[bufferSize.getAndIncrement()] = task
     }
 
 }
 
 open class LocalQueue {
 
-    private val q = PriorityIntQueue(4)
+    private val q = PriorityLongQueue(4)
 
     private val _size = atomic(0)
 
     @Synchronized // we use synchronize here for the lock elision optimization
-    fun extractTop(): Int? {
-        return q.poll()?.also {
+    fun extractTop(): Long {
+        val value = q.poll()
+        if (value != Long.MIN_VALUE) {
             _size.decrementAndGet()
         }
+        return value
     }
 
     @Synchronized
-    fun add(task: Int) {
+    fun add(task: Long) {
         _size.decrementAndGet()
         q.insert(task)
     }
