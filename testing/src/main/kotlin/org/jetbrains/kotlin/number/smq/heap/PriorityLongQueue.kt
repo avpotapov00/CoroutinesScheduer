@@ -1,5 +1,7 @@
 package org.jetbrains.kotlin.number.smq.heap
 
+import org.jetbrains.kotlin.util.firstFromLong
+
 class PriorityLongQueue(
     private val arity: Int,
     initialCapacity: Int = DEFAULT_INITIAL_CAPACITY,
@@ -55,7 +57,7 @@ class PriorityLongQueue(
             val otherChild = getChild(i, k)
             if (otherChild <= -1) break
             val otherChildValue = queue[otherChild]
-            if (otherChildValue < minChildValue) {
+            if (otherChildValue.firstFromLong < minChildValue.firstFromLong) {
                 minChild = otherChild
                 minChildValue = otherChildValue
             }
@@ -68,7 +70,7 @@ class PriorityLongQueue(
         var index = 0
         var minChild = getMinChild(index)
 
-        while (minChild > -1 && queue[minChild] < value) {
+        while (minChild > -1 && queue[minChild].firstFromLong < value.firstFromLong) {
             queue[index] = queue[minChild]
             index = minChild
             minChild = getMinChild(index)
@@ -81,7 +83,7 @@ class PriorityLongQueue(
         var index = fromIndex
         var parent = getParent(index)
 
-        while (parent > -1 && queue[parent] > value) {
+        while (parent > -1 && queue[parent].firstFromLong > value.firstFromLong) {
             queue[index] = queue[parent]
             index = parent
             parent = getParent(index)

@@ -52,7 +52,19 @@ open class StealingMultiQueue<E : Comparable<E>>(
     }
 
     fun stealAndDeleteFromGlobal(): E? {
-        val stolen = globalQueue.steal()
+        val queueToSteal = globalQueue
+
+        return stealFromExactQueue(queueToSteal)
+    }
+
+    fun stealAndDeleteFromSelf(): E? {
+        val queueToSteal = queues[currThread()]
+
+        return stealFromExactQueue(queueToSteal)
+    }
+
+    private fun stealFromExactQueue(queueToSteal: StealingQueue<E>): E? {
+        val stolen = queueToSteal.steal()
         if (stolen.isEmpty()) return null // failed
         // Return the first task and add the others
         // to the thread - local buffer of stolen ones

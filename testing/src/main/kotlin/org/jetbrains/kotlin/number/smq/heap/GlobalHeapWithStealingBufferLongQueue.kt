@@ -2,9 +2,9 @@ package org.jetbrains.kotlin.number.smq.heap
 
 import kotlinx.atomicfu.atomic
 
-class GlobalHeapWithStealingBufferIntQueue(
+class GlobalHeapWithStealingBufferLongQueue(
     private val stealSize: Int
-): StealingIntQueue {
+): StealingLongQueue {
 
     val size: Int get() = _size.value
 

@@ -1,11 +1,11 @@
 plugins {
-    kotlin("jvm") version "1.5.31"
-    id("org.jetbrains.kotlin.kapt") version "1.5.31"
+    kotlin("jvm") version "1.6.0"
+    id("org.jetbrains.kotlin.kapt") version "1.6.0"
     id("me.champeau.jmh") version "0.6.6"
 }
 
 group = "org.example"
-version = "1.0-SNAPSHOT"
+version = "1.2-SNAPSHOT"
 
 repositories {
     mavenCentral()
@@ -29,7 +29,7 @@ dependencies {
     testImplementation("org.openjdk.jmh:jmh-core:1.30")
     kaptTest("org.openjdk.jmh:jmh-generator-annprocess:1.30")
 
-    testImplementation("org.jetbrains.kotlin:kotlin-test:1.5.31")
+    testImplementation("org.jetbrains.kotlin:kotlin-test:1.6.0")
     testImplementation("org.junit.jupiter:junit-jupiter-params:5.7.0")
 }
 

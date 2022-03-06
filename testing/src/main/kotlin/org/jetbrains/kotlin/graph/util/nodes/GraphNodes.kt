@@ -48,6 +48,7 @@ fun randomConnectedGraph(
     val s = ArrayList(nodesList)
     var cur = s.removeAt(r.nextInt(s.size))
     val visited = mutableSetOf<Node>(cur)
+
     while (s.isNotEmpty()) {
         val neighbor = s.removeAt(r.nextInt(s.size))
         if (visited.add(neighbor)) {

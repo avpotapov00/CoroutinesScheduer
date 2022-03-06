@@ -13,6 +13,6 @@ fun main() {
         startIndex = 0,
         poolSize = 4,
         stealSize = 8,
-        pSteal = 0.25
+        pSteal = 1.0
     ).use { it.waitForTermination() }
 }

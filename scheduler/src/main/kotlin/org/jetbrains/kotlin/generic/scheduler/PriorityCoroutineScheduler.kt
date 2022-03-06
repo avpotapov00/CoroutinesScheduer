@@ -21,7 +21,9 @@ class SMQPriorityCoroutineScheduler(
     poolSize: Int,
     stealSize: Int = 3,
     pSteal: Double = 0.04,
-    postponeThreadsStart: Boolean = false
+    postponeThreadsStart: Boolean = false,
+    // The number of attempts to take a task from one thread
+    private val retryCount: Int = 100
 ) : StealingMultiQueue<PriorityTask>(stealSize, pSteal, poolSize), PriorityCoroutineScheduler {
 
     /**
@@ -113,7 +115,7 @@ class SMQPriorityCoroutineScheduler(
                     continue
                 }
 
-                if (attempts < RETRY_COUNT) {
+                if (attempts < retryCount) {
                     attempts++
                     continue
                 }
@@ -127,13 +129,21 @@ class SMQPriorityCoroutineScheduler(
                     continue
                 }
 
+                // if it didn't work, we try to remove it from self
+                task = stealAndDeleteFromSelf()
+
+                if (task != null) {
+                    attempts = 0
+                    task.task.run()
+                    continue
+                }
+
                 goWait()
                 attempts = 0
             }
         }
 
         private fun goWait() {
-
             var oldThread: Worker?
 
             do {
@@ -164,9 +174,6 @@ class SMQPriorityCoroutineScheduler(
     }
 
 }
-
-// The number of attempts to take a task from one thread
-private const val RETRY_COUNT = 100
 
 // The threshold of tasks in the thread queue after which other threads must be woken up
 private const val TASKS_COUNT_WAKE_THRESHOLD = 30

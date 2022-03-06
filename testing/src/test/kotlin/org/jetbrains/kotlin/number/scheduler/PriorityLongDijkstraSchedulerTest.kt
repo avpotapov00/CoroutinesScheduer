@@ -1,18 +1,18 @@
 package org.jetbrains.kotlin.number.scheduler
 
 import kotlinx.coroutines.runBlocking
-import org.jetbrains.kotlin.generic.dispatcher.PriorityQueueCoroutineDispatcher
-import org.jetbrains.kotlin.generic.scheduler.SMQPriorityCoroutineScheduler
-import org.jetbrains.kotlin.graph.dijkstra.*
-import org.jetbrains.kotlin.graph.util.nodes.randomConnectedGraph
+import org.jetbrains.kotlin.graph.dijkstra.IntNode
+import org.jetbrains.kotlin.graph.dijkstra.clearNodes
+import org.jetbrains.kotlin.graph.dijkstra.randomConnectedIntGraph
+import org.jetbrains.kotlin.graph.dijkstra.shortestPathSequentialLong
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.RepeatedTest
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import java.util.concurrent.Phaser
-import kotlin.concurrent.thread
+import java.io.File
 import kotlin.random.Random
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 
 
 internal class PriorityLongDijkstraSchedulerTest {
@@ -47,6 +47,26 @@ internal class PriorityLongDijkstraSchedulerTest {
         Assertions.assertEquals(0, a.distance)
         Assertions.assertEquals(2, b.distance)
         Assertions.assertEquals(3, c.distance)
+    }
+
+    @RepeatedTest(500)
+    fun `should find shortest paths sequential on bamboo`() {
+        val nodesList = List(180) { IntNode() }
+
+        nodesList.withIndex().windowed(2) { (a, b) ->
+            a.value.addEdge(b.index, 1)
+            b.value.addEdge(a.index, 1)
+        }
+
+        val dijkstraScheduler =
+            PriorityLongDijkstraScheduler(nodesList, 0, 1, stealSize = 1, pSteal = 1.0, retryCount = 3)
+        dijkstraScheduler.waitForTermination()
+
+        println(nodesList.map { it.distance })
+
+        nodesList.forEach { node ->
+            assertNotEquals(Int.MAX_VALUE, node.distance)
+        }
     }
 
     @Test
@@ -85,40 +105,24 @@ internal class PriorityLongDijkstraSchedulerTest {
         assertEquals(sequentialResult, parallelResult)
     }
 
-    @Test
-    fun `phaser test`() {
+    @RepeatedTest(30)
+    fun `should beat bug`() {
+        val fileName = "E:\\Diploma\\dm-examples-master\\CoroutinesScheduer\\testing\\src\\test\\resources\\bug.txt"
+        val graph = parseGraph(fileName).map { it.node }
 
-        val phaser = Phaser(4)
-
-        repeat(2) {
-            thread(name = "t_$it") {
-                Thread.sleep(1000)
-                phaser.arriveAndDeregister()
-
-                println("Mid ${Thread.currentThread().name}")
-
-                Thread.sleep(1000)
-                phaser.register()
-                Thread.sleep(1000)
-                phaser.arriveAndDeregister()
-                println("Done ${Thread.currentThread().name}")
-            }
+        PriorityLongDijkstraScheduler(graph, 0, 4, pSteal = 1.0).use { scheduler ->
+            scheduler.waitForTermination()
         }
 
-        thread {
-            Thread.sleep(5_000)
-            phaser.arriveAndDeregister()
-            println("All done, ${phaser.unarrivedParties}")
-        }
-
-        phaser.arriveAndAwaitAdvance()
-
+        println(graph.map { it.distance })
     }
 
     @Timeout(100)
-    @RepeatedTest(20)
+    @RepeatedTest(40)
     fun `test on trees`() {
-        testOnRandomGraphs(100, 99)
+        val nodes = 15
+
+        testOnRandomGraphs(nodes, nodes - 1)
     }
 
     @RepeatedTest(20)
@@ -136,7 +140,7 @@ internal class PriorityLongDijkstraSchedulerTest {
     @Test
     @Timeout(100_000)
     fun `test on big graphs`() {
-        testOnRandomGraphs(10000, 100000)
+        testOnBigRandomGraphs(10000, 100000)
     }
 
     private fun testOnRandomGraphs(nodes: Int, edges: Int) = runBlocking {
@@ -145,27 +149,91 @@ internal class PriorityLongDijkstraSchedulerTest {
         repeat(GRAPHS) { i ->
             val nodesList = randomConnectedIntGraph(nodes, edges)
             repeat(SEARCHES) { j ->
-
-                val from = r.nextInt(nodes)
-                shortestPathSequentialLong(nodesList, from)
-                val seqRes = nodesList.map { it.distance }
-                clearNodes(nodesList)
-
-                PriorityLongDijkstraScheduler(nodesList, from, 4).use { scheduler ->
-
-                    scheduler.waitForTermination()
-
-                    val parRes = nodesList.map { it.distance }
-                    clearNodes(nodesList)
-
-                    assertEquals(seqRes, parRes)
-                }
+                searchAndAssert(r, nodes, nodesList)
             }
         }
     }
 
+    private fun testOnBigRandomGraphs(nodes: Int, edges: Int) = runBlocking {
+        val r = Random(0)
+
+        repeat(GRAPHS) { i ->
+            val nodesList = randomConnectedIntGraph(nodes, edges)
+            repeat(1) { j ->
+                searchAndAssert(r, nodes, nodesList)
+            }
+            println("Done graph: $i")
+        }
+    }
+
+    private fun searchAndAssert(
+        r: Random,
+        nodes: Int,
+        nodesList: List<IntNode>,
+    ) {
+        val from = r.nextInt(nodes)
+        shortestPathSequentialLong(nodesList, from)
+        val seqRes = nodesList.map { it.distance }
+        clearNodes(nodesList)
+
+        PriorityLongDijkstraScheduler(nodesList, from, 4, pSteal = 0.25).use { scheduler ->
+
+            scheduler.waitForTermination()
+
+            val parRes = nodesList.map { it.distance }
+            clearNodes(nodesList)
+
+            assertEquals(seqRes, parRes)
+        }
+    }
+
+    @Test
+    fun `parse graph`() {
+        val fileName = "E:\\Diploma\\dm-examples-master\\CoroutinesScheduer\\testing\\src\\test\\resources\\bug.txt"
+        val graph = parseGraph(fileName)
+
+        val actualLine = graph.map { it.node }.toString()
+        val expectedLine = File(fileName).readText()
+
+        assertEquals(expectedLine, actualLine)
+    }
 
 }
+
+private fun parseGraph(file: String): List<IndexedNode> {
+    val text = File(file).readText()
+    val rawNodes = text.drop(1).dropLast(1).split("Node").drop(1)
+    val numbersRegexp = "[0-9]+".toRegex()
+
+    val edges = mutableListOf<FullIntEdge>()
+
+    val nodes = rawNodes.mapIndexed { index, raw ->
+        val chunked = numbersRegexp.findAll(raw).map { it.value.toInt() }.toList().chunked(2)
+        check(chunked.all { it.size == 2 }) { "Illegal chunc size" }
+
+        chunked.forEach { (to, weight) -> edges.add(FullIntEdge(index, to, weight)) }
+
+        IndexedNode(index, IntNode())
+    }
+
+    edges.forEach { (from, to, w) ->
+        nodes[from].node.addEdge(to, w)
+    }
+
+    return nodes
+}
+
+
+private data class IndexedNode(
+    val index: Int,
+    val node: IntNode,
+)
+
+private data class FullIntEdge(
+    val from: Int,
+    val to: Int,
+    val weight: Int,
+)
 
 private const val GRAPHS = 10
 private const val SEARCHES = 100

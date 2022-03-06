@@ -4,15 +4,15 @@ import kotlinx.atomicfu.AtomicInt
 import kotlinx.atomicfu.atomic
 import java.util.Arrays
 
-class HeapWithStealingBufferIntQueue(
+class HeapWithStealingBufferLongQueue(
     private val stealSize: Int
-) : LocalQueue(), StealingIntQueue {
+) : LocalQueue(), StealingLongQueue {
 
     private val bit = 1 shl 20
 
     private val reverseBit = bit - 1
 
-    private val state: AtomicInt = atomic(0)
+    private val state: AtomicInt = atomic(0 or bit)
 
     private val array = LongArray(stealSize)
 
@@ -57,7 +57,8 @@ class HeapWithStealingBufferIntQueue(
     private fun fillBuffer() { // stolen = true
         clearBuffer()
         for (i in 0 until stealSize) {
-            val task = extractTop() ?: break
+            val task = extractTop()
+            if (task == Long.MIN_VALUE) break
             addToBuffer(task)
         }
         state.value = ((state.value and reverseBit) + 1) and reverseBit

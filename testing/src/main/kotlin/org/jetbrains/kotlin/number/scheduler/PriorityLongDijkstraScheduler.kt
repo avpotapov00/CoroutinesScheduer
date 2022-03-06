@@ -6,7 +6,7 @@ import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.atomicArrayOfNulls
 import org.jetbrains.kotlin.generic.smq.IndexedThread
 import org.jetbrains.kotlin.graph.dijkstra.IntNode
-import org.jetbrains.kotlin.number.smq.StealingIntMultiQueue
+import org.jetbrains.kotlin.number.smq.StealingLongMultiQueue
 import org.jetbrains.kotlin.util.secondFromLong
 import org.jetbrains.kotlin.util.zip
 import java.io.Closeable
@@ -23,7 +23,9 @@ class PriorityLongDijkstraScheduler(
     poolSize: Int,
     stealSize: Int = 3,
     pSteal: Double = 0.04,
-) : StealingIntMultiQueue(stealSize, pSteal, poolSize), Closeable {
+    // The number of attempts to take a task from one thread
+    private val retryCount: Int = 100
+) : StealingLongMultiQueue(stealSize, pSteal, poolSize), Closeable {
 
     /**
      * End of work flag
@@ -103,13 +105,22 @@ class PriorityLongDijkstraScheduler(
                     continue
                 }
 
-                if (attempts < RETRY_COUNT) {
+                if (attempts < retryCount) {
                     attempts++
                     continue
                 }
 
                 // if it didn't work, we try to remove it from the global queue
                 task = stealAndDeleteFromGlobal()
+
+                if (task != Long.MIN_VALUE) {
+                    attempts = 0
+                    tryUpdate(nodes[task.secondFromLong])
+                    continue
+                }
+
+                // if it didn't work, we try to remove it from the self queue
+                task = stealAndDeleteFromSelf()
 
                 if (task != Long.MIN_VALUE) {
                     attempts = 0
@@ -178,9 +189,6 @@ class PriorityLongDijkstraScheduler(
     }
 
 }
-
-// The number of attempts to take a task from one thread
-private const val RETRY_COUNT = 100
 
 // The threshold of tasks in the thread queue after which other threads must be woken up
 private const val TASKS_COUNT_WAKE_THRESHOLD = 30

@@ -1,13 +1,7 @@
 package org.jetbrains.kotlin.graph.dijkstra
 
 import kotlinx.atomicfu.atomic
-import org.jetbrains.kotlin.generic.smq.IndexedThreadImpl
-import org.jetbrains.kotlin.graph.util.nodes.NODE_DISTANCE_COMPARATOR
-import org.jetbrains.kotlin.graph.util.nodes.Node
-import org.jetbrains.kotlin.number.smq.StealingIntMultiQueue
 import java.util.*
-import java.util.concurrent.Phaser
-import java.util.concurrent.atomic.AtomicInteger
 import kotlin.collections.ArrayList
 
 class IntNode {
@@ -27,6 +21,10 @@ class IntNode {
 
     fun addEdge(to: Int, weight: Int) {
         edges.add(IntEdge(to, weight))
+    }
+
+    override fun toString(): String {
+        return "Node(${edges.joinToString(separator = ",") { "{${it.to},${it.weight}}" }})"
     }
 
 }
@@ -53,7 +51,12 @@ fun randomConnectedIntGraph(
     while (s.isNotEmpty()) {
         val neighbor = s.removeAt(r.nextInt(s.size))
         if (visited.add(neighbor)) {
-            cur.node.addEdge(neighbor.index, r.nextInt(maxWeight))
+            val weight = r.nextInt(maxWeight)
+
+            cur.node.addEdge(neighbor.index, weight)
+            neighbor.node.addEdge(cur.index, weight)
+        } else {
+            error("Visited")
         }
         cur = neighbor
     }
