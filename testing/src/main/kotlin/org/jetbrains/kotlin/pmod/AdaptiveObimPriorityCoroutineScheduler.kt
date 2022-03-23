@@ -63,6 +63,5 @@ class AdaptiveObimPriorityCoroutineScheduler(
 
 }
 
-
 // The number of cells that we will look at trying to wake up the thread
 private const val WAKE_RETRY_COUNT = 5

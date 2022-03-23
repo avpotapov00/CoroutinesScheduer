@@ -103,6 +103,7 @@ open class StealingLongMultiQueue (
 
     private fun getQueueToSteal(): StealingLongQueue {
         val index = ThreadLocalRandom.current().nextInt(0, queues.size + 1)
+
         return if (index == queues.size) globalQueue else queues[index]
     }
 

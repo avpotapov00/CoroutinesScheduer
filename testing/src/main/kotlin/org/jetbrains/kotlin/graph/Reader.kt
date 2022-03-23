@@ -1,5 +1,6 @@
 package org.jetbrains.kotlin.graph
 
+import org.jetbrains.kotlin.graph.dijkstra.BfsIntNode
 import org.jetbrains.kotlin.graph.dijkstra.IntNode
 import java.io.BufferedReader
 import java.io.File
@@ -39,6 +40,13 @@ class GraphReader {
             }
     }
 
+    fun readGraphNodesBiDirectBfs(fileName: String): List<BfsIntNode> {
+        this::class.java.getResourceAsStream(fileName)!!
+            .bufferedReader().use { reader ->
+                return readNodesBFS(reader)
+            }
+    }
+
     fun readGraphNodesBiDirectFromFile(fileName: String): List<IntNode> {
         File(fileName).bufferedReader().use { reader ->
                 return readNodes(reader)
@@ -68,6 +76,35 @@ class GraphReader {
 
             nodes[from].addEdge(to, weight)
             nodes[to].addEdge(from, weight)
+
+            line = reader.readLine()
+        }
+
+        return nodes
+    }
+
+    private fun readNodesBFS(reader: BufferedReader): List<BfsIntNode> {
+        var line = reader.readLine()
+        while (line.startsWith("c")) {
+            line = reader.readLine()
+        }
+        check(line.startsWith("p sp "))
+        val count = line.split(" ")[2].toInt()
+
+        val nodes = ArrayList<BfsIntNode>(count)
+        repeat((0 until count).count()) { nodes.add(BfsIntNode()) }
+
+        do {
+            line = reader.readLine()
+        } while (line.startsWith("c"))
+
+        while (line != null) {
+            val (_, fromStr, toStr, _) = line.split(" ")
+            val from = fromStr.toInt() - 1
+            val to = toStr.toInt() - 1
+
+            nodes[from].addEdge(to)
+            nodes[to].addEdge(from)
 
             line = reader.readLine()
         }

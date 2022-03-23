@@ -29,6 +29,31 @@ class IntNode {
 
 }
 
+class BfsIntNode {
+    private val _distance = atomic(Integer.MAX_VALUE)
+
+    var distance
+        get() = _distance.value
+        set(value) {
+            _distance.value = value
+        }
+
+    fun casDistance(cur: Int, update: Int) = _distance.compareAndSet(cur, update)
+
+    val outgoingEdges: List<Int> get() = edges
+
+    private val edges: MutableList<Int> = arrayListOf()
+
+    fun addEdge(to: Int) {
+        edges.add(to)
+    }
+
+    override fun toString(): String {
+        return "Node(${edges.joinToString(separator = ",") { "{${it}}" }})"
+    }
+
+}
+
 data class IntEdge(
     val to: Int,
     val weight: Int
@@ -77,6 +102,10 @@ fun randomConnectedIntGraph(
 }
 
 fun clearNodes(nodes: List<IntNode>) {
+    nodes.forEach { it.distance = Int.MAX_VALUE }
+}
+
+fun clearNodesBfs(nodes: List<BfsIntNode>) {
     nodes.forEach { it.distance = Int.MAX_VALUE }
 }
 

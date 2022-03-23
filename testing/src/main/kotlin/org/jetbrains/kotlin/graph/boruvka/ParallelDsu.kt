@@ -3,7 +3,7 @@ package org.jetbrains.kotlin.graph.boruvka
 import java.util.concurrent.atomic.AtomicReferenceArray
 
 
-data class RankParent(
+private data class RankParent(
     val rank: Int,
     val parent: Int
 )

@@ -24,14 +24,14 @@ class MQModelTest {
         b.addEdge(2, 1)
         a.addEdge(2, 4)
 
-        singleThreadMQDijkstra(nodesList, 0)
+        shortestPathParallel(nodesList, 0, 4)
 
         assertEquals(0, a.distance)
         assertEquals(2, b.distance)
         assertEquals(3, c.distance)
     }
 
-    @RepeatedTest(500)
+    @RepeatedTest(10)
     fun `should find shortest paths sequential on bamboo`() {
         val nodesList = List(180) { IntNode() }
 
@@ -40,9 +40,7 @@ class MQModelTest {
             b.value.addEdge(a.index, 1)
         }
 
-        singleThreadMQDijkstra(nodesList, 0)
-
-        println(nodesList.map { it.distance })
+        shortestPathParallel(nodesList, 0, 4)
 
         nodesList.forEach { node ->
             assertNotEquals(Int.MAX_VALUE, node.distance)
@@ -67,8 +65,8 @@ class MQModelTest {
         testOnRandomGraphs(100, 1000)
     }
 
-    @Test
-    @Timeout(100_000)
+//    @Test
+//    @Timeout(100_000)
     fun `test on big graphs`() {
         testOnRandomGraphs(10000, 100000)
     }
@@ -84,7 +82,7 @@ class MQModelTest {
                 val seqRes = nodesList.map { it.distance }
                 clearNodes(nodesList)
 
-                singleThreadMQDijkstra(nodesList, fromIndex)
+                shortestPathParallel(nodesList, fromIndex, 4)
                 val parRes = nodesList.map { it.distance }
                 clearNodes(nodesList)
 

@@ -10,7 +10,7 @@ import kotlin.math.floor
 import kotlin.math.log2
 import kotlin.math.max
 
-class AdaptiveObim<T>(
+open class AdaptiveObim<T>(
     threads: Int,
     private val chunkSize: Int = 64,
 ) {
@@ -22,6 +22,10 @@ class AdaptiveObim<T>(
     private var perThreadStorage = MultiThreadStorage(threads) { index -> PerThreadStorage(index) }
 
     private val masterLog = Array<Pair<DeltaIndex, Queue<T>>?>(10_000) { null }
+
+    private val masterLogQueue = Array<Queue<T>?>(10_000) { null }
+
+    private val masterLogDeltaIndex = Array<DeltaIndex?>(10_000) { null }
 
     private val masterLock = ReentrantLock()
 
@@ -257,7 +261,10 @@ class AdaptiveObim<T>(
             queue = ConcurrentLinkedQueue()
             perThreadStorage.lastMasterVersion = masterVersion.value + 1
 
-            masterLog[masterVersion.value] = (deltaIndex to queue)
+//            masterLog[masterVersion.value] = (deltaIndex to queue)
+            masterLogQueue[masterVersion.value] = queue
+            masterLogDeltaIndex[masterVersion.value] = deltaIndex
+
             masterVersion.getAndIncrement()
 
             perThreadStorage.local[deltaIndex] = queue
@@ -273,7 +280,9 @@ class AdaptiveObim<T>(
         if (perItem.lastMasterVersion != masterVersion.value) {
             while (perItem.lastMasterVersion < masterVersion.value) {
 
-                val (deltaIndex, queue) = masterLog[perItem.lastMasterVersion]!!
+//                val (deltaIndex, queue) = masterLog[perItem.lastMasterVersion]!!
+                val deltaIndex = masterLogDeltaIndex[perItem.lastMasterVersion]!!
+                val queue = masterLogQueue[perItem.lastMasterVersion]!!
 
                 perItem.local[deltaIndex] = queue
 

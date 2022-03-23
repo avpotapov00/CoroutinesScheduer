@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "org.example"
-version = "1.2-SNAPSHOT"
+version = "1.7-SNAPSHOT"
 
 repositories {
     mavenCentral()
@@ -45,4 +45,10 @@ tasks.withType<Test> {
     minHeapSize = "512m"
     maxHeapSize = "1024m"
     jvmArgs = listOf("-XX:MaxPermSize=512m")
+}
+
+val jar by tasks.getting(Jar::class) {
+    manifest {
+        attributes["Main-Class"] = "org.jetbrains.kotlin.number.RunnerKt"
+    }
 }

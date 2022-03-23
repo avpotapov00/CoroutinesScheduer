@@ -86,7 +86,7 @@ class DijkstraPmodModelTest {
                     assertEquals(seqRes, parRes)
                 }
             }
-            println("Done")
+//            println("Done")
         }
     }
 

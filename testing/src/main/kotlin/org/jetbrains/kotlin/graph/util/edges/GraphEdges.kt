@@ -1,7 +1,7 @@
 package org.jetbrains.kotlin.graph.util.edges
 
 
-class Graph(
+data class Graph(
     val nodes: Int,
     val edges: List<Edge>
 )
