@@ -33,15 +33,15 @@ open class DijkstraSMQBenchmark {
 //        @Param("1", "2", "4", "8", "16", "32", "64", "128", "256")
         var threads: Int = 128
 
-//        @Param("1", "0.5", "0.25", "0.125", "0.0625", "0.03125", "0.015625", "0.0078125", "0.001953125")
+        @Param("1", "0.5", "0.25", "0.125", "0.0625", "0.03125", "0.015625", "0.0078125", "0.001953125")
         var pSteal: Double = 0.03125
 
-//        @Param("1", "2", "4", "8", "16", "32", "64", "128", "256")
+        @Param("1", "2", "4", "8", "16", "32", "64", "128", "256")
         var stealSize: Int = 8
 
         @Param(
             "/USA-road-d.W.gr",
-//            "/USA-road-d.USA.gr"
+            "/USA-road-d.USA.gr"
         )
         lateinit var sourcePath: String
 
