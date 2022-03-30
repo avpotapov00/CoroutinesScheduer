@@ -8,8 +8,10 @@ import kotlinx.coroutines.runBlocking
 import org.jetbrains.kotlin.graph.dijkstra.randomConnectedIntGraph
 import org.jetbrains.kotlin.graph.util.edges.Edge
 import org.jetbrains.kotlin.graph.util.edges.Graph
+import org.jetbrains.kotlin.number.scheduler.parallelBoruvkaExp
 import org.junit.jupiter.api.RepeatedTest
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Timeout
 import kotlin.test.assertEquals
 
 class BoruvkaModelTest {
@@ -42,6 +44,62 @@ class BoruvkaModelTest {
         val mstGuavaWeight = BoruvkaMST(guavaGraph).totalWeight
 
         assertEquals(mstGuavaWeight, mstAsync)
+    }
+
+    @RepeatedTest(100)
+    fun `async scheduler test with random graph`() {
+        val graph = randomConnectedIntGraph(16, 25)
+        val (nodesCount, edges) = intNodesToEdges(graph)
+        val guavaGraph = intNodesToGuavaGraph(graph)
+
+        val mstAsync = parallelBoruvkaExp(edges, nodesCount, 4).second.sumOf { it.weight }
+        val mstGuavaWeight = BoruvkaMST(guavaGraph).totalWeight
+
+        assertEquals(mstGuavaWeight, mstAsync)
+    }
+
+    @RepeatedTest(20)
+    @Timeout(100_000)
+    fun `test on big graphs`() {
+        testOnRandomGraphs(10000, 100000)
+    }
+
+    @Timeout(10)
+    @RepeatedTest(3000)
+    fun `test on trees`() {
+        testOnRandomGraphs(100, 99)
+    }
+
+    @RepeatedTest(3000)
+    @Timeout(100)
+    fun `test on very small graphs 2`() {
+        testOnRandomGraphs(16, 25)
+    }
+
+    @RepeatedTest(3000)
+    @Timeout(100)
+    fun `test on small graphs`() {
+        testOnRandomGraphs(100, 1000)
+    }
+
+    @RepeatedTest(3000)
+    @Timeout(100)
+    fun `test on big trees`() {
+        testOnRandomGraphs(1000, 999)
+    }
+
+    private fun testOnRandomGraphs(nodes: Int, edgesCount: Int) {
+        repeat(GRAPHS) { i ->
+            val graph = randomConnectedIntGraph(nodes, edgesCount)
+            val (nodesCount, edges) = intNodesToEdges(graph)
+            val guavaGraph = intNodesToGuavaGraph(graph)
+
+            val mstAsync = parallelBoruvkaExp(edges, nodesCount, 8)
+            val mstAsyncSum = mstAsync.second.sumOf { it.weight }
+            val mstGuavaWeight = BoruvkaMST(guavaGraph).totalWeight
+
+            assertEquals(mstGuavaWeight, mstAsyncSum)
+        }
     }
 
     private fun makeTestGraphGuava(): MutableValueGraph<Int, Int> {
@@ -80,3 +138,6 @@ class BoruvkaModelTest {
     }
 
 }
+
+private const val GRAPHS = 10
+private const val SEARCHES = 100

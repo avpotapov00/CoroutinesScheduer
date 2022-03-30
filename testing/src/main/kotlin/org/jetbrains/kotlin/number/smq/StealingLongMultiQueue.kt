@@ -5,7 +5,9 @@ import org.jetbrains.kotlin.generic.smq.IndexedThread
 import org.jetbrains.kotlin.number.smq.heap.GlobalHeapWithStealingBufferLongQueue
 import org.jetbrains.kotlin.number.smq.heap.HeapWithStealingBufferLongQueue
 import org.jetbrains.kotlin.number.smq.heap.StealingLongQueue
+import org.jetbrains.kotlin.util.secondFromLong
 import java.util.concurrent.ThreadLocalRandom
+import kotlin.system.exitProcess
 
 open class StealingLongMultiQueue (
     stealSize: Int,

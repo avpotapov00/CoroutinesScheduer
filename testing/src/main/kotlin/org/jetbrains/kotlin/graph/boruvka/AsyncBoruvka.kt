@@ -83,7 +83,7 @@ suspend fun asyncBoruvkaGlobalScope(nodes: Int, edges: List<Edge>): Set<Edge> {
 
     edgesSet.addAll(edges)
 
-    while (mst.size != nodes - 1) {
+    while (mst.size < nodes - 1) {
 
         val shortestPaths: AtomicReferenceArray<Edge> = AtomicReferenceArray(nodes)
 
@@ -121,7 +121,6 @@ suspend fun asyncBoruvkaGlobalScope(nodes: Int, edges: List<Edge>): Set<Edge> {
                 val edge = shortestPaths[node]
 
                 if (edge != null) {
-
                     dsu.union(edge.from, edge.to)
                     mst.add(shortestPaths[node])
                 }
