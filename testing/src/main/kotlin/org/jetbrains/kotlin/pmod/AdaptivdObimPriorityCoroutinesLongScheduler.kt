@@ -1,4 +1,4 @@
-//package org.jetbrains.kotlin.pmod
+//package org.jetbrains.kotlin.number.scheduler
 //
 //import kotlinx.atomicfu.AtomicArray
 //import kotlinx.atomicfu.AtomicRef
@@ -6,19 +6,26 @@
 //import kotlinx.atomicfu.atomicArrayOfNulls
 //import org.jetbrains.kotlin.generic.smq.IndexedThread
 //import org.jetbrains.kotlin.graph.dijkstra.IntNode
+//import org.jetbrains.kotlin.number.smq.StealingLongMultiQueue
+//import org.jetbrains.kotlin.util.secondFromLong
 //import org.jetbrains.kotlin.util.zip
 //import java.io.Closeable
 //import java.util.concurrent.Phaser
 //import java.util.concurrent.locks.LockSupport
 //import kotlin.random.Random
 //
-//class PriorityLongDijkstraScheduler(
+///**
+// * В Long храним два значения: первое это приоритет, второе это индекс вершины
+// */
+//class AdaptivdObimPriorityCoroutinesLongScheduler(
 //    private val nodes: List<IntNode>,
 //    startIndex: Int,
 //    poolSize: Int,
+//    stealSize: Int = 3,
+//    pSteal: Double = 0.04,
 //    // The number of attempts to take a task from one thread
 //    private val retryCount: Int = 100
-//) : AdaptiveObim<Int>(poolSize + 1), Closeable {
+//): Closeable {
 //
 //    /**
 //     * End of work flag
@@ -46,7 +53,7 @@
 //    private val finishPhaser = Phaser(poolSize + 1)
 //
 //    init {
-//        pushOuter(startIndex, 0)
+//        insertGlobal(0.zip(startIndex))
 //
 //
 //        nodes[startIndex].distance = 0
@@ -90,11 +97,11 @@
 //            while (!terminated) {
 //
 //                // trying to get from local queue
-//                var task = pop()
+//                var task = delete()
 //
-//                if (task != null) {
+//                if (task != Long.MIN_VALUE) {
 //                    attempts = 0
-//                    tryUpdate(nodes[task])
+//                    tryUpdate(nodes[task.secondFromLong])
 //                    continue
 //                }
 //
@@ -104,11 +111,20 @@
 //                }
 //
 //                // if it didn't work, we try to remove it from the global queue
-//                task = pop()
+//                task = stealAndDeleteFromGlobal()
 //
-//                if (task != null) {
+//                if (task != Long.MIN_VALUE) {
 //                    attempts = 0
-//                    tryUpdate(nodes[task])
+//                    tryUpdate(nodes[task.secondFromLong])
+//                    continue
+//                }
+//
+//                // if it didn't work, we try to remove it from the self queue
+//                task = stealAndDeleteFromSelf()
+//
+//                if (task != Long.MIN_VALUE) {
+//                    attempts = 0
+//                    tryUpdate(nodes[task.secondFromLong])
 //                    continue
 //                }
 //
@@ -137,7 +153,9 @@
 //
 //        fun checkWakeThread() {
 //            // if the number of tasks in the local queue is more than the threshold, try to wake up a new thread
-//            tryWakeThread()
+//            if (size() > TASKS_COUNT_WAKE_THRESHOLD) {
+//                tryWakeThread()
+//            }
 //        }
 //
 //        private fun tryUpdate(cur: IntNode) {

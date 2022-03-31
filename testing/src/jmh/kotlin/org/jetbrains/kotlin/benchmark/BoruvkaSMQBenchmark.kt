@@ -9,7 +9,7 @@ import java.util.concurrent.TimeUnit
 
 
 @Warmup(iterations = 1)
-@Measurement(iterations = 100)
+@Measurement(iterations = 3)
 @Fork(value = 1)
 @Threads(1)
 @BenchmarkMode(Mode.AverageTime)
@@ -18,12 +18,19 @@ open class BoruvkaSMQBenchmark {
 
     @Benchmark
     fun testSequence(config: Config) {
-        parallelBoruvkaExp(
+        val result = parallelBoruvkaExp(
             config.edges,
             config.nodes,
             poolSize = config.threads,
             stealSize = config.stealSize,
             pSteal = config.pSteal
+        )
+        addResult(
+            BenchmarkResultWithMetrics(
+                "mst_ks", config.sourcePath, config.pSteal, config.stealSize,
+                result.first.retrievalsS.value.toLong(),
+                result.first.successSteals.value.toLong()
+            )
         )
     }
 
@@ -41,7 +48,7 @@ open class BoruvkaSMQBenchmark {
 
         @Param(
             "/USA-road-d.W.gr",
-            "/USA-road-d.USA.gr"
+//            "/USA-road-d.USA.gr"
         )
         lateinit var sourcePath: String
 
@@ -55,6 +62,39 @@ open class BoruvkaSMQBenchmark {
             val (nodesCount, edges) = intNodesToEdges(graph)
             nodes = nodesCount
             this.edges = edges
+        }
+
+        @TearDown(Level.Trial)
+        fun printAll() {
+            val results = readyResults
+            val size = results.size.toDouble()
+            val avgSuccess = results.sumOf { it.successSteals } / size
+            val avgRetrievals = results.sumOf { it.retrievals } / size
+            val config = results.first()
+
+            println("\nDone,${config.testName},${config.pSteal},${config.graphName},${config.stealSize},${avgRetrievals},${avgSuccess}")
+
+            clearResults()
+        }
+
+    }
+
+    companion object {
+
+        private val results = ArrayList<BenchmarkResultWithMetrics>()
+
+        val readyResults: List<BenchmarkResultWithMetrics>
+            @Synchronized
+            get() = results
+
+        @Synchronized
+        fun clearResults() {
+            results.clear()
+        }
+
+        @Synchronized
+        fun addResult(result: BenchmarkResultWithMetrics) {
+            results.add(result)
         }
 
     }

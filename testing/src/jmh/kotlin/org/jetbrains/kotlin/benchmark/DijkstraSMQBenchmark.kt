@@ -52,7 +52,7 @@ open class DijkstraSMQBenchmark {
 
         @Param(
             "/USA-road-d.W.gr",
-//            "/USA-road-d.USA.gr"
+            "/USA-road-d.USA.gr"
         )
         lateinit var sourcePath: String
 

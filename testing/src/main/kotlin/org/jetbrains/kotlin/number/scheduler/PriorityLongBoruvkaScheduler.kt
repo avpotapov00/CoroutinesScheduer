@@ -9,6 +9,7 @@ import org.jetbrains.kotlin.generic.smq.IndexedThread
 import org.jetbrains.kotlin.graph.boruvka.ParallelDsu
 import org.jetbrains.kotlin.graph.util.edges.Edge
 import org.jetbrains.kotlin.number.smq.StealingLongMultiQueue
+import org.jetbrains.kotlin.number.smq.StealingLongMultiQueueKS
 import org.jetbrains.kotlin.util.secondFromLong
 import org.jetbrains.kotlin.util.zip
 import java.io.Closeable
@@ -30,7 +31,7 @@ class PriorityLongBoruvkaScheduler(
     pSteal: Double = 0.04,
     // The number of attempts to take a task from one thread
     private val retryCount: Int = 300,
-) : StealingLongMultiQueue(stealSize, pSteal, poolSize), Closeable {
+) : StealingLongMultiQueueKS(stealSize, pSteal, poolSize), Closeable {
 
     val dsu = ParallelDsu(nodes)
 
