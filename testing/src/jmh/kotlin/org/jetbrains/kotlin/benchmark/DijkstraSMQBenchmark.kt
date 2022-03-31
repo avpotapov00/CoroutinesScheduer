@@ -26,14 +26,13 @@ open class DijkstraSMQBenchmark {
             pSteal = config.pSteal
         ).use {
             it.waitForTermination()
-            addResult(
+            addResultDijkstra(
                 BenchmarkResultWithMetrics(
                     "dijkstra_ks", config.sourcePath, config.pSteal, config.stealSize,
-                    it.retrievalsS.value.toLong(),
-                    it.successSteals.value.toLong()
+                    it.retrievalsS.sumOf { counter -> counter.value.toLong() },
+                    it.successSteals.sumOf { counter -> counter.value.toLong() }
                 )
             )
-//            println("\nDone,dijkstra,${config.pSteal},${config.sourcePath},${config.stealSize},${it.retrievals.value},${it.successSteals.value}")
         }
     }
 
@@ -52,7 +51,7 @@ open class DijkstraSMQBenchmark {
 
         @Param(
             "/USA-road-d.W.gr",
-            "/USA-road-d.USA.gr"
+//            "/USA-road-d.USA.gr"
         )
         lateinit var sourcePath: String
 
@@ -65,13 +64,13 @@ open class DijkstraSMQBenchmark {
         }
 
         @TearDown(Level.Invocation)
-        fun clearResults() {
+        fun clear() {
             clearNodes(nodes)
         }
 
         @TearDown(Level.Trial)
         fun printAll() {
-            val results = readyResults
+            val results = readyResultsDijkstra
             val size = results.size.toDouble()
             val avgSuccess = results.sumOf { it.successSteals } / size
             val avgRetrievals = results.sumOf { it.retrievals } / size
@@ -79,7 +78,7 @@ open class DijkstraSMQBenchmark {
 
             println("\nDone,${config.testName},${config.pSteal},${config.graphName},${config.stealSize},${avgRetrievals},${avgSuccess}")
 
-            clearResults()
+            clearMyResults()
         }
 
     }
@@ -88,17 +87,17 @@ open class DijkstraSMQBenchmark {
 
         private val results = ArrayList<BenchmarkResultWithMetrics>()
 
-        val readyResults: List<BenchmarkResultWithMetrics>
+        val readyResultsDijkstra: List<BenchmarkResultWithMetrics>
             @Synchronized
             get() = results
 
         @Synchronized
-        fun clearResults() {
+        fun clearMyResults() {
             results.clear()
         }
 
         @Synchronized
-        fun addResult(result: BenchmarkResultWithMetrics) {
+        fun addResultDijkstra(result: BenchmarkResultWithMetrics) {
             results.add(result)
         }
 

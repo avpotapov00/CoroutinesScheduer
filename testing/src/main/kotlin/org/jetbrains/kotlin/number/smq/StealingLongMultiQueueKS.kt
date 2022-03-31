@@ -20,9 +20,9 @@ open class StealingLongMultiQueueKS(
 
     private val stolenTasks = ThreadLocal.withInitial { ArrayDeque<Long>(stealSize) }
 
-    val successSteals = atomic(0) // K
+    val successSteals = Array(threads) { atomic(0) }// K
 
-    val retrievalsS = atomic(0) // S
+    val retrievalsS = Array(threads) { atomic(0) } // S
 
     // your size + the size of the buffer for theft + the size of the global queue
     fun size() = queues[currThread()].size + stolenTasks.get().size + globalQueue.size
@@ -32,7 +32,10 @@ open class StealingLongMultiQueueKS(
     }
 
     fun insert(task: Long) {
-        queues[currThread()].addLocal(task)
+        val currThread = currThread()
+
+        retrievalsS[currThread].incrementAndGet()
+        queues[currThread].addLocal(task)
     }
 
     fun delete(): Long {
@@ -40,16 +43,18 @@ open class StealingLongMultiQueueKS(
         if (stolenTasks.get().isNotEmpty()) {
             return stolenTasks.get().removeFirst()
         }
+        val currThread = currThread()
+
         // Should we steal ?
         if (shouldSteal()) {
-            val task = trySteal()
+            val task = trySteal(currThread)
             if (task != Long.MIN_VALUE) {
                 return task
             }
         }
         // Try to retrieve the top task
         // from the thread - local queue
-        val task = queues[currThread()].extractTopLocal()
+        val task = queues[currThread].extractTopLocal()
         if (task != Long.MIN_VALUE) {
             return task
         }
@@ -83,7 +88,7 @@ open class StealingLongMultiQueueKS(
 
     private fun shouldSteal() = ThreadLocalRandom.current().nextDouble() < pSteal
 
-    private fun trySteal(): Long {
+    private fun trySteal(currThread: Int): Long {
         // Choose a random queue and check whether
         // its top task has higher priority
 
@@ -91,13 +96,11 @@ open class StealingLongMultiQueueKS(
         val ourTop = queues[currThread()].top
         val otherTop = otherQueue.top
 
-        retrievalsS.incrementAndGet()
-
         if (ourTop == Long.MIN_VALUE || otherTop == Long.MIN_VALUE || otherTop == ourTop || otherTop.firstFromLong < ourTop.firstFromLong) {
             // Try to steal a better task !
             val stolen = otherQueue.steal()
             if (stolen.isEmpty()) return Long.MIN_VALUE // failed
-            successSteals.incrementAndGet()
+            successSteals[currThread].addAndGet(stolen.size)
             // Return the first task and add the others
             // to the thread - local buffer of stolen ones
             stolenTasks.get().addAll(stolen.subList(1, stolen.size))
