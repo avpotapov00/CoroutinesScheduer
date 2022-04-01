@@ -34,7 +34,6 @@ open class StealingLongMultiQueueKS(
     fun insert(task: Long) {
         val currThread = currThread()
 
-        retrievalsS[currThread].incrementAndGet()
         queues[currThread].addLocal(task)
     }
 
@@ -95,12 +94,17 @@ open class StealingLongMultiQueueKS(
         val otherQueue = getQueueToSteal()
         val ourTop = queues[currThread()].top
         val otherTop = otherQueue.top
+        if (ourTop != Long.MIN_VALUE) {
+            retrievalsS[currThread].incrementAndGet()
+        }
 
         if (ourTop == Long.MIN_VALUE || otherTop == Long.MIN_VALUE || otherTop == ourTop || otherTop.firstFromLong < ourTop.firstFromLong) {
             // Try to steal a better task !
             val stolen = otherQueue.steal()
             if (stolen.isEmpty()) return Long.MIN_VALUE // failed
-            successSteals[currThread].addAndGet(stolen.size)
+            if (ourTop != Long.MIN_VALUE) {
+                successSteals[currThread].incrementAndGet()
+            }
             // Return the first task and add the others
             // to the thread - local buffer of stolen ones
             stolenTasks.get().addAll(stolen.subList(1, stolen.size))

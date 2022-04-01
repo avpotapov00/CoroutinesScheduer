@@ -50,8 +50,8 @@ open class DijkstraSMQBenchmark {
         var stealSize: Int = 8
 
         @Param(
-            "/USA-road-d.W.gr",
-//            "/USA-road-d.USA.gr"
+//            "/USA-road-d.W.gr",
+            "/USA-road-d.USA.gr"
         )
         lateinit var sourcePath: String
 
