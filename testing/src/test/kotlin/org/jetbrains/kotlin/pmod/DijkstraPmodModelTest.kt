@@ -73,7 +73,7 @@ class DijkstraPmodModelTest {
         repeat(GRAPHS) { i ->
             val nodesList = randomConnectedGraph(nodes, edges)
             repeat(SEARCHES) { j ->
-                val scheduler = AdaptiveObimPriorityCoroutineScheduler(4, startThreads = true)
+                val scheduler = AdaptiveObimPriorityCoroutineBlockingScheduler(4)
 
                 PriorityQueueCoroutineDispatcher(scheduler).use { dispatcher ->
                     val from = nodesList[r.nextInt(nodes)]
@@ -85,8 +85,9 @@ class DijkstraPmodModelTest {
                     clearNodes(nodesList)
                     assertEquals(seqRes, parRes)
                 }
+                println("Done_$j")
             }
-//            println("Done")
+            println("Done")
         }
     }
 
