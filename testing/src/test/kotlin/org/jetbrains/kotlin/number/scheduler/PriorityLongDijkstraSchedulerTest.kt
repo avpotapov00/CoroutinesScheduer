@@ -59,7 +59,7 @@ internal class PriorityLongDijkstraSchedulerTest {
         }
 
         val dijkstraScheduler =
-            PriorityLongDijkstraScheduler(nodesList, 0, 1, stealSize = 1, pSteal = 1.0, retryCount = 3)
+            PriorityLongDijkstraSchedulerKS(nodesList, 0, 1, stealSize = 1, pSteal = 1.0, retryCount = 3)
         dijkstraScheduler.waitForTermination()
 
         println(nodesList.map { it.distance })
@@ -78,7 +78,7 @@ internal class PriorityLongDijkstraSchedulerTest {
         b.addEdge(2, 1)
         a.addEdge(2, 4)
 
-        val dijkstraScheduler = PriorityLongDijkstraScheduler(nodesList, 0, 4)
+        val dijkstraScheduler = PriorityLongDijkstraSchedulerKS(nodesList, 0, 4)
 
         dijkstraScheduler.waitForTermination()
 
@@ -97,24 +97,12 @@ internal class PriorityLongDijkstraSchedulerTest {
 
         clearNodes(nodes)
 
-        val dijkstraScheduler = PriorityLongDijkstraScheduler(nodes, 0, 4)
+        val dijkstraScheduler = PriorityLongDijkstraSchedulerKS(nodes, 0, 4)
         dijkstraScheduler.waitForTermination()
 
         val parallelResult = nodes.map { it.distance }
 
         assertEquals(sequentialResult, parallelResult)
-    }
-
-    @RepeatedTest(30)
-    fun `should beat bug`() {
-        val fileName = "E:\\Diploma\\dm-examples-master\\CoroutinesScheduer\\testing\\src\\test\\resources\\bug.txt"
-        val graph = parseGraph(fileName).map { it.node }
-
-        PriorityLongDijkstraScheduler(graph, 0, 4, pSteal = 1.0).use { scheduler ->
-            scheduler.waitForTermination()
-        }
-
-        println(graph.map { it.distance })
     }
 
     @Timeout(100)
@@ -176,7 +164,7 @@ internal class PriorityLongDijkstraSchedulerTest {
         val seqRes = nodesList.map { it.distance }
         clearNodes(nodesList)
 
-        PriorityLongDijkstraScheduler(nodesList, from, 4, pSteal = 0.25).use { scheduler ->
+        PriorityLongDijkstraSchedulerKS(nodesList, from, 4, pSteal = 0.25).use { scheduler ->
 
             scheduler.waitForTermination()
 

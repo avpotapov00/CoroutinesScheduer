@@ -9,6 +9,8 @@ data class BenchmarkResultWithMetrics(
     val graphName: String,
     val pSteal: Double,
     val stealSize: Int,
-    val retrievals: Long,
-    val successSteals: Long
+    val totalTasksProcessed: Long,
+    val successStealing: Long,
+    val failedStealing: Long,
+    val stealingAttempts: Long,
 )

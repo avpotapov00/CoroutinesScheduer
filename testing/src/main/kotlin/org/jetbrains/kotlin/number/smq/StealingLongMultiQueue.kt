@@ -22,10 +22,6 @@ open class StealingLongMultiQueue (
 
     private val stolenTasks = ThreadLocal.withInitial { ArrayDeque<Long>(stealSize) }
 
-    val successSteals = atomic(0)
-
-    val retrievals = atomic(0)
-
     // your size + the size of the buffer for theft + the size of the global queue
     fun size() = queues[currThread()].size + stolenTasks.get().size + globalQueue.size
 
@@ -86,7 +82,6 @@ open class StealingLongMultiQueue (
     private fun shouldSteal() = ThreadLocalRandom.current().nextDouble() < pSteal
 
     private fun trySteal(): Long {
-        retrievals.incrementAndGet()
         // Choose a random queue and check whether
         // its top task has higher priority
 
@@ -98,12 +93,13 @@ open class StealingLongMultiQueue (
             // Try to steal a better task !
             val stolen = otherQueue.steal()
             if (stolen.isEmpty()) return Long.MIN_VALUE // failed
-            if (ourTop != Long.MIN_VALUE) {
-                successSteals.incrementAndGet()
-            }
             // Return the first task and add the others
             // to the thread - local buffer of stolen ones
-            stolenTasks.get().addAll(stolen.subList(1, stolen.size))
+            val stolenTasksDeque = stolenTasks.get()
+
+            for (i in 1 until stolen.size) {
+                stolenTasksDeque.add(stolen[i])
+            }
             return stolen[0]
         }
 

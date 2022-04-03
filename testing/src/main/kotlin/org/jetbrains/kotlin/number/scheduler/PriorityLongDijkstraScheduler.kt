@@ -90,7 +90,7 @@ class PriorityLongDijkstraScheduler(
 
     inner class Worker(override val index: Int) : IndexedThread() {
 
-        private val random = Random(0)
+        private val random = Random(index)
 
         override fun run() {
             var attempts = 0

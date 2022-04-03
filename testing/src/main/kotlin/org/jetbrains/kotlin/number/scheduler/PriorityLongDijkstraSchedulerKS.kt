@@ -7,6 +7,7 @@ import kotlinx.atomicfu.atomicArrayOfNulls
 import org.jetbrains.kotlin.generic.smq.IndexedThread
 import org.jetbrains.kotlin.graph.dijkstra.IntNode
 import org.jetbrains.kotlin.number.smq.StealingLongMultiQueueKS
+import org.jetbrains.kotlin.util.firstFromLong
 import org.jetbrains.kotlin.util.secondFromLong
 import org.jetbrains.kotlin.util.zip
 import java.io.Closeable
@@ -91,7 +92,15 @@ class PriorityLongDijkstraSchedulerKS(
 
     inner class Worker(override val index: Int) : IndexedThread() {
 
-        private val random = Random(0)
+        private val random = Random(index)
+
+        var totalTasksProcessed: Long = 0
+
+        var successStealing: Int = 0
+
+        var failedStealing: Int = 0
+
+        var stealingAttempts: Int = 0
 
         override fun run() {
             var attempts = 0
@@ -102,6 +111,7 @@ class PriorityLongDijkstraSchedulerKS(
 
                 if (task != Long.MIN_VALUE) {
                     attempts = 0
+                    totalTasksProcessed++
                     tryUpdate(nodes[task.secondFromLong])
                     continue
                 }
@@ -125,6 +135,7 @@ class PriorityLongDijkstraSchedulerKS(
 
                 if (task != Long.MIN_VALUE) {
                     attempts = 0
+                    totalTasksProcessed++
                     tryUpdate(nodes[task.secondFromLong])
                     continue
                 }
@@ -134,8 +145,65 @@ class PriorityLongDijkstraSchedulerKS(
             }
         }
 
-        private fun goWait() {
+        private fun delete(): Long {
+            // Do we have previously stolen tasks ?
+            if (stolenTasks.get().isNotEmpty()) {
+                return stolenTasks.get().removeFirst()
+            }
+            val currThread = index
 
+            // Should we steal ?
+            if (shouldSteal()) {
+                val task = trySteal(currThread)
+                if (task != Long.MIN_VALUE) {
+                    return task
+                }
+            }
+            // Try to retrieve the top task
+            // from the thread - local queue
+            val task = queues[currThread].extractTopLocal()
+            if (task != Long.MIN_VALUE) {
+                return task
+            }
+            // The local queue is empty , try to steal
+            return tryStealWithoutCheck()
+        }
+
+        private fun trySteal(currThread: Int): Long {
+            // Choose a random queue and check whether
+            // its top task has higher priority
+
+            val otherQueue = getQueueToSteal()
+            val ourTop = queues[currThread()].top
+            val otherTop = otherQueue.top
+            if (ourTop != Long.MIN_VALUE) {
+                stealingAttempts++
+            }
+
+            if (ourTop == Long.MIN_VALUE || otherTop == Long.MIN_VALUE || otherTop == ourTop || otherTop.firstFromLong < ourTop.firstFromLong) {
+                // Try to steal a better task !
+                val stolen = otherQueue.steal()
+                if (stolen.isEmpty()) {
+                    failedStealing++
+                    return Long.MIN_VALUE
+                } // failed
+                if (ourTop != Long.MIN_VALUE) {
+                    successStealing++
+                }
+                // Return the first task and add the others
+                // to the thread - local buffer of stolen ones
+                val stolenTasksDeque = stolenTasks.get()
+
+                for (i in 1 until stolen.size) {
+                    stolenTasksDeque.add(stolen[i])
+                }
+                return stolen[0]
+            }
+
+            return Long.MIN_VALUE
+        }
+
+        private fun goWait() {
             var oldThread: Worker?
 
             do {
@@ -181,6 +249,10 @@ class PriorityLongDijkstraSchedulerKS(
             checkWakeThread()
         }
 
+        fun insert(task: Long) {
+            queues[index].addLocal(task)
+        }
+
     }
 
 
@@ -188,6 +260,22 @@ class PriorityLongDijkstraSchedulerKS(
         terminated = true
         threads.forEach { it.interrupt() }
         threads.forEach { it.join() }
+    }
+
+    fun totalTasksProcessed(): Long {
+        return threads.sumOf { it.totalTasksProcessed }
+    }
+
+    fun successStealing(): Long {
+        return threads.sumOf { it.successStealing.toLong() }
+    }
+
+    fun failedStealing(): Long {
+        return threads.sumOf { it.failedStealing.toLong() }
+    }
+
+    fun stealingAttempts(): Long {
+        return threads.sumOf { it.stealingAttempts.toLong() }
     }
 
 }
