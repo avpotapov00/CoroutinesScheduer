@@ -6,17 +6,14 @@ import org.jetbrains.kotlin.graph.dijkstra.clearNodes
 import org.jetbrains.kotlin.graph.dijkstra.randomConnectedIntGraph
 import org.jetbrains.kotlin.graph.dijkstra.shortestPathSequentialLong
 import org.jetbrains.kotlin.graph.util.generator.generateBamboo
-import org.junit.jupiter.api.Assertions
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.RepeatedTest
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import java.io.File
 import kotlin.random.Random
-import kotlin.test.assertEquals
-import kotlin.test.assertNotEquals
 
-
-internal class PriorityLongDijkstraSchedulerTest {
+internal class NonBlockingLongDijkstraSchedulerTest {
 
     @Test
     fun `should store two ints in long`() {
@@ -29,8 +26,8 @@ internal class PriorityLongDijkstraSchedulerTest {
             val xRecovered = (l shr 32).toInt()
             val yRecovered = l.toInt()
 
-            assertEquals(x, xRecovered)
-            assertEquals(y, yRecovered)
+            kotlin.test.assertEquals(x, xRecovered)
+            kotlin.test.assertEquals(y, yRecovered)
         }
     }
 
@@ -45,9 +42,9 @@ internal class PriorityLongDijkstraSchedulerTest {
 
         shortestPathSequentialLong(nodesList, 0)
 
-        Assertions.assertEquals(0, a.distance)
-        Assertions.assertEquals(2, b.distance)
-        Assertions.assertEquals(3, c.distance)
+        assertEquals(0, a.distance)
+        assertEquals(2, b.distance)
+        assertEquals(3, c.distance)
     }
 
     @RepeatedTest(500)
@@ -59,14 +56,14 @@ internal class PriorityLongDijkstraSchedulerTest {
             b.value.addEdge(a.index, 1)
         }
 
-        val dijkstraScheduler =
-            PriorityLongDijkstraScheduler(nodesList, 0, 1, stealSize = 1, pSteal = 1.0, retryCount = 3)
-        dijkstraScheduler.waitForTermination()
+        NonBlockingLongDijkstraScheduler(nodesList, 0, 1, stealSize = 1, pSteal = 1.0, retryCount = 3).use {
+            it.waitForTermination()
+        }
 
         println(nodesList.map { it.distance })
 
         nodesList.forEach { node ->
-            assertNotEquals(Int.MAX_VALUE, node.distance)
+            kotlin.test.assertNotEquals(Int.MAX_VALUE, node.distance)
         }
     }
 
@@ -79,13 +76,11 @@ internal class PriorityLongDijkstraSchedulerTest {
         b.addEdge(2, 1)
         a.addEdge(2, 4)
 
-        val dijkstraScheduler = PriorityLongDijkstraScheduler(nodesList, 0, 4)
+        NonBlockingLongDijkstraScheduler(nodesList, 0, 4).use { it.waitForTermination() }
 
-        dijkstraScheduler.waitForTermination()
-
-        Assertions.assertEquals(0, a.distance)
-        Assertions.assertEquals(2, b.distance)
-        Assertions.assertEquals(3, c.distance)
+        assertEquals(0, a.distance)
+        assertEquals(2, b.distance)
+        assertEquals(3, c.distance)
     }
 
     @Test
@@ -98,30 +93,31 @@ internal class PriorityLongDijkstraSchedulerTest {
 
         clearNodes(nodes)
 
-        val dijkstraScheduler = PriorityLongDijkstraScheduler(nodes, 0, 4)
+        val dijkstraScheduler = NonBlockingLongDijkstraScheduler(nodes, 0, 4)
         dijkstraScheduler.waitForTermination()
 
         val parallelResult = nodes.map { it.distance }
 
-        assertEquals(sequentialResult, parallelResult)
+        kotlin.test.assertEquals(sequentialResult, parallelResult)
     }
 
+    @Test
     @RepeatedTest(10)
     fun `bamboo should match`() {
-        val nodes = generateBamboo(3_000_000)
+        val nodes = generateBamboo(2_000_000)
 
         shortestPathSequentialLong(nodes, 0)
         val sequentialResult = nodes.map { it.distance }
 
         clearNodes(nodes)
 
-        PriorityLongDijkstraScheduler(nodes, 0, 8, pSteal = 0.0625, stealSize = 8).use {
+        NonBlockingLongDijkstraScheduler(nodes, 0, 8, pSteal = 0.0625, stealSize = 8).use {
             it.waitForTermination()
         }
 
         val parallelResult = nodes.map { it.distance }
 
-        Assertions.assertEquals(sequentialResult, parallelResult)
+        assertEquals(sequentialResult, parallelResult)
     }
 
     @Timeout(100)
@@ -183,15 +179,15 @@ internal class PriorityLongDijkstraSchedulerTest {
         val seqRes = nodesList.map { it.distance }
         clearNodes(nodesList)
 
-        PriorityLongDijkstraScheduler(nodesList, from, 4, pSteal = 0.25).use { scheduler ->
+        NonBlockingLongDijkstraScheduler(nodesList, from, 4, pSteal = 0.25).use { scheduler ->
 
             scheduler.waitForTermination()
-
-            val parRes = nodesList.map { it.distance }
-            clearNodes(nodesList)
-
-            assertEquals(seqRes, parRes)
         }
+
+        val parRes = nodesList.map { it.distance }
+        clearNodes(nodesList)
+
+        kotlin.test.assertEquals(seqRes, parRes)
     }
 
     @Test
@@ -202,7 +198,7 @@ internal class PriorityLongDijkstraSchedulerTest {
         val actualLine = graph.map { it.node }.toString()
         val expectedLine = File(fileName).readText()
 
-        assertEquals(expectedLine, actualLine)
+        kotlin.test.assertEquals(expectedLine, actualLine)
     }
 
 }
@@ -230,17 +226,6 @@ private fun parseGraph(file: String): List<IndexedNode> {
     return nodes
 }
 
-
-data class IndexedNode(
-    val index: Int,
-    val node: IntNode,
-)
-
-data class FullIntEdge(
-    val from: Int,
-    val to: Int,
-    val weight: Int,
-)
 
 private const val GRAPHS = 10
 private const val SEARCHES = 100

@@ -6,7 +6,6 @@
 //import kotlinx.atomicfu.atomicArrayOfNulls
 //import org.jetbrains.kotlin.generic.smq.IndexedThread
 //import org.jetbrains.kotlin.graph.dijkstra.IntNode
-//import org.jetbrains.kotlin.number.smq.StealingLongMultiQueue
 //import org.jetbrains.kotlin.util.secondFromLong
 //import org.jetbrains.kotlin.util.zip
 //import java.io.Closeable
@@ -17,7 +16,7 @@
 ///**
 // * В Long храним два значения: первое это приоритет, второе это индекс вершины
 // */
-//class AdaptivdObimPriorityCoroutinesLongScheduler(
+//class AdaptiveObimPriorityCoroutinesLongScheduler(
 //    private val nodes: List<IntNode>,
 //    startIndex: Int,
 //    poolSize: Int,

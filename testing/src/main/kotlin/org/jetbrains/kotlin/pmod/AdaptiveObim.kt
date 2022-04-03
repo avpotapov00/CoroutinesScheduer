@@ -21,8 +21,6 @@ open class AdaptiveObim<T>(
 
     private var perThreadStorage = MultiThreadStorage(threads) { index -> PerThreadStorage(index) }
 
-    private val masterLog = Array<Pair<DeltaIndex, Queue<T>>?>(10_000) { null }
-
     private val masterLogQueue = Array<Queue<T>?>(10_000) { null }
 
     private val masterLogDeltaIndex = Array<DeltaIndex?>(10_000) { null }
@@ -30,6 +28,18 @@ open class AdaptiveObim<T>(
     private val masterLock = ReentrantLock()
 
     private val masterVersion = atomic(0)
+
+    fun size(): Int {
+        val perItem = perThreadStorage.get()
+
+        perItem.lock.withLock {
+            var sum = 0
+            for (i in 0 until masterVersion.value) {
+                sum += masterLogQueue[i]!!.size
+            }
+            return sum
+        }
+    }
 
     fun pushOuter(value: T, priority: Int) {
         val perItem = perThreadStorage.storages.first()
@@ -46,7 +56,7 @@ open class AdaptiveObim<T>(
     private fun pushLocal(
         perItem: PerThreadStorage<T>,
         priority: Int,
-        value: T
+        value: T,
     ) {
         perItem.lock.withLock {
 
@@ -141,7 +151,7 @@ open class AdaptiveObim<T>(
     }
 
     private fun findTailIterator(
-        perItem: PerThreadStorage<T>
+        perItem: PerThreadStorage<T>,
     ): Pair<MutableIterator<MutableMap.MutableEntry<DeltaIndex, Queue<T>>>, Map.Entry<DeltaIndex, Queue<T>>?>? {
         val deltaIndex = DeltaIndex(0, 0)
 
@@ -241,7 +251,7 @@ open class AdaptiveObim<T>(
 
     private fun slowUpdateLocalOrCreate(
         perThreadStorage: PerThreadStorage<T>,
-        deltaIndex: DeltaIndex
+        deltaIndex: DeltaIndex,
     ): Queue<T> {
         //update local until we find it or we get the write lock
         do {
@@ -295,7 +305,7 @@ open class AdaptiveObim<T>(
 
 
     class PerThreadStorage<T>(
-        val id: Int
+        val id: Int,
     ) {
 
         var currentQueue: Queue<T>? = null
@@ -358,7 +368,7 @@ open class AdaptiveObim<T>(
 
 class DeltaIndex(
     priority: Int,
-    private val l: Int
+    private val l: Int,
 ) : Comparable<DeltaIndex> {
 
     private val p: Int = priority ushr l
