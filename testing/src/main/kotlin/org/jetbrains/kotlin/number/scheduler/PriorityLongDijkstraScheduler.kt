@@ -50,7 +50,7 @@ class PriorityLongDijkstraScheduler(
 
     private val random = Random(0)
 
-    private val finishPhaser = Phaser(poolSize + 1)
+    val finishPhaser = Phaser(poolSize + 1)
 
     init {
         insertGlobal(0.zip(startIndex))
@@ -153,7 +153,9 @@ class PriorityLongDijkstraScheduler(
 
         fun checkWakeThread() {
             // if the number of tasks in the local queue is more than the threshold, try to wake up a new thread
-            if (size() > TASKS_COUNT_WAKE_THRESHOLD) {
+            val size = size()
+            if (size > TASKS_COUNT_WAKE_THRESHOLD) {
+//                println("Try wake: $size")
                 tryWakeThread()
             }
         }
@@ -172,13 +174,13 @@ class PriorityLongDijkstraScheduler(
                         val task = nextDist.zip(e.to)
 
                         insert(task)
-                        checkWakeThread()
                         break
                     }
                 }
             }
-        }
 
+            checkWakeThread()
+        }
     }
 
 

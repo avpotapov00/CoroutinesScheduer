@@ -8,12 +8,13 @@ import org.jetbrains.kotlin.generic.smq.IndexedThread
 import org.jetbrains.kotlin.graph.dijkstra.IntNode
 import org.jetbrains.kotlin.number.smq.StealingLongMultiQueueKS
 import org.jetbrains.kotlin.util.firstFromLong
+import org.jetbrains.kotlin.util.indexedBinarySearch
 import org.jetbrains.kotlin.util.secondFromLong
 import org.jetbrains.kotlin.util.zip
 import java.io.Closeable
 import java.util.concurrent.Phaser
+import java.util.concurrent.ThreadLocalRandom
 import java.util.concurrent.locks.LockSupport
-import kotlin.random.Random
 
 /**
  * @author Потапов Александр
@@ -22,8 +23,8 @@ import kotlin.random.Random
 class PriorityLongDijkstraSchedulerKS(
     private val nodes: List<IntNode>,
     startIndex: Int,
-    poolSize: Int,
-    stealSize: Int = 3,
+    val poolSize: Int,
+    val stealSize: Int = 3,
     pSteal: Double = 0.04,
     // The number of attempts to take a task from one thread
     private val retryCount: Int = 100
@@ -50,9 +51,7 @@ class PriorityLongDijkstraSchedulerKS(
      */
     private val sleepingArray: AtomicArray<Worker?> = atomicArrayOfNulls(poolSize * 2)
 
-    private val random = Random(0)
-
-    private val finishPhaser = Phaser(poolSize + 1)
+    val finishPhaser = Phaser(poolSize + 1)
 
     init {
         insertGlobal(0.zip(startIndex))
@@ -62,45 +61,23 @@ class PriorityLongDijkstraSchedulerKS(
         threads.forEach { it.start() }
     }
 
-
     fun waitForTermination() {
         finishPhaser.arriveAndAwaitAdvance()
     }
 
-    private fun tryWakeThread() {
-        var recentWorker = sleepingBox.value
-
-        // if found a thread in sleeping box, trying to get it, or go further, if someone has taken it earlier
-        while (recentWorker != null) {
-            if (sleepingBox.compareAndSet(recentWorker, null)) {
-                LockSupport.unpark(recentWorker)
-                return
-            }
-            recentWorker = sleepingBox.value
-        }
-
-        // Try to get a thread from the array several times
-        for (i in 0 until WAKE_RETRY_COUNT) {
-            val index = random.nextInt(0, sleepingArray.size)
-            recentWorker = sleepingArray[index].value
-
-            if (recentWorker != null && sleepingArray[index].compareAndSet(recentWorker, null)) {
-                LockSupport.unpark(recentWorker)
-            }
-        }
-    }
-
     inner class Worker(override val index: Int) : IndexedThread() {
-
-        private val random = Random(index)
 
         var totalTasksProcessed: Long = 0
 
         var successStealing: Int = 0
 
+        var tasksLowerThanStolen: Int = 0
+
         var failedStealing: Int = 0
 
         var stealingAttempts: Int = 0
+
+        val random: ThreadLocalRandom = ThreadLocalRandom.current()
 
         override fun run() {
             var attempts = 0
@@ -174,13 +151,13 @@ class PriorityLongDijkstraSchedulerKS(
             // its top task has higher priority
 
             val otherQueue = getQueueToSteal()
-            val ourTop = queues[currThread()].top
+            val ourTop = queues[currThread].top
             val otherTop = otherQueue.top
             if (ourTop != Long.MIN_VALUE) {
                 stealingAttempts++
             }
 
-            if (ourTop == Long.MIN_VALUE || otherTop == Long.MIN_VALUE || otherTop == ourTop || otherTop.firstFromLong < ourTop.firstFromLong) {
+            if (ourTop == Long.MIN_VALUE || otherTop == Long.MIN_VALUE || otherTop.firstFromLong < ourTop.firstFromLong) {
                 // Try to steal a better task !
                 val stolen = otherQueue.steal()
                 if (stolen.isEmpty()) {
@@ -189,6 +166,8 @@ class PriorityLongDijkstraSchedulerKS(
                 } // failed
                 if (ourTop != Long.MIN_VALUE) {
                     successStealing++
+
+                    tasksLowerThanStolen += indexedBinarySearch(stolen, ourTop)
                 }
                 // Return the first task and add the others
                 // to the thread - local buffer of stolen ones
@@ -220,10 +199,34 @@ class PriorityLongDijkstraSchedulerKS(
             finishPhaser.register()
         }
 
-        fun checkWakeThread() {
+        private fun checkWakeThread() {
             // if the number of tasks in the local queue is more than the threshold, try to wake up a new thread
             if (size() > TASKS_COUNT_WAKE_THRESHOLD) {
                 tryWakeThread()
+            }
+        }
+
+        private fun tryWakeThread() {
+            var recentWorker = sleepingBox.value
+
+            // if found a thread in sleeping box, trying to get it, or go further, if someone has taken it earlier
+            while (recentWorker != null) {
+                if (sleepingBox.compareAndSet(recentWorker, null)) {
+                    LockSupport.unpark(recentWorker)
+                    return
+                }
+                recentWorker = sleepingBox.value
+            }
+
+            // Try to get a thread from the array several times
+            for (i in 0 until WAKE_RETRY_COUNT) {
+                val index = ThreadLocalRandom.current().nextInt(0, sleepingArray.size)
+                recentWorker = sleepingArray[index].value
+
+                if (recentWorker != null && sleepingArray[index].compareAndSet(recentWorker, null)) {
+                    LockSupport.unpark(recentWorker)
+                    return
+                }
             }
         }
 
@@ -276,6 +279,10 @@ class PriorityLongDijkstraSchedulerKS(
 
     fun stealingAttempts(): Long {
         return threads.sumOf { it.stealingAttempts.toLong() }
+    }
+
+    fun tasksLowerThanStolen(): Long {
+        return threads.sumOf { it.tasksLowerThanStolen.toLong() }
     }
 
 }

@@ -2,11 +2,39 @@ package org.jetbrains.kotlin.number.smq.heap
 
 import kotlinx.atomicfu.AtomicInt
 import kotlinx.atomicfu.atomic
-import java.util.Arrays
+import java.util.*
 
 class HeapWithStealingBufferLongQueue(
     private val stealSize: Int
-) : LocalQueue(), StealingLongQueue {
+) : StealingLongQueue {
+
+    private val q = PriorityLongQueue(4)
+
+    private val _size = atomic(0)
+
+    val size: Int
+        get() {
+            // Если украли
+            if (state.value and bit != 0) {
+                return _size.value
+            }
+            return _size.value + stealSize
+        }
+
+    @Synchronized // we use synchronize here for the lock elision optimization
+    fun extractTop(): Long {
+        val value = q.poll()
+        if (value != Long.MIN_VALUE) {
+            _size.decrementAndGet()
+        }
+        return value
+    }
+
+    @Synchronized
+    fun add(task: Long) {
+        _size.incrementAndGet()
+        q.insert(task)
+    }
 
     private val bit = 1 shl 20
 
@@ -28,17 +56,18 @@ class HeapWithStealingBufferLongQueue(
         return extractTop()
     }
 
-    override val top: Long get() {
-        while (true) {
-            val currentState = state.value
-            if (currentState and bit != 0) return Long.MIN_VALUE
+    override val top: Long
+        get() {
+            while (true) {
+                val currentState = state.value
+                if (currentState and bit != 0) return Long.MIN_VALUE
 
-            val top = firstFromBuffer()
-            if ((currentState and reverseBit) != (state.value and reverseBit)) continue
+                val top = firstFromBuffer()
+                if ((currentState and reverseBit) != (state.value and reverseBit)) continue
 
-            return top
+                return top
+            }
         }
-    }
 
     override fun steal(): List<Long> {
         while (true) {
@@ -65,7 +94,6 @@ class HeapWithStealingBufferLongQueue(
     }
 
     private fun firstFromBuffer(): Long {
-        // TODO: Let's do not use expensive AtomicReferenceArray, use plain array instead.
         return array[0]
     }
 
@@ -92,28 +120,4 @@ class HeapWithStealingBufferLongQueue(
         array[bufferSize.getAndIncrement()] = task
     }
 
-}
-
-open class LocalQueue {
-
-    private val q = PriorityLongQueue(4)
-
-    private val _size = atomic(0)
-
-    @Synchronized // we use synchronize here for the lock elision optimization
-    fun extractTop(): Long {
-        val value = q.poll()
-        if (value != Long.MIN_VALUE) {
-            _size.decrementAndGet()
-        }
-        return value
-    }
-
-    @Synchronized
-    fun add(task: Long) {
-        _size.decrementAndGet()
-        q.insert(task)
-    }
-
-    val size: Int get() = _size.value
 }

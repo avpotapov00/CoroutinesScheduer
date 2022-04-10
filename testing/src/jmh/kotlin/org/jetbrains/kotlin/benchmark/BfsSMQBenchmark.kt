@@ -2,12 +2,8 @@ package org.jetbrains.kotlin.benchmark
 
 import org.jetbrains.kotlin.graph.GraphReader
 import org.jetbrains.kotlin.graph.dijkstra.BfsIntNode
-import org.jetbrains.kotlin.graph.dijkstra.IntNode
-import org.jetbrains.kotlin.graph.dijkstra.clearNodes
 import org.jetbrains.kotlin.graph.dijkstra.clearNodesBfs
-import org.jetbrains.kotlin.number.scheduler.PriorityLongBfsScheduler
 import org.jetbrains.kotlin.number.scheduler.PriorityLongBfsSchedulerKS
-import org.jetbrains.kotlin.number.scheduler.PriorityLongDijkstraSchedulerKS
 import org.openjdk.jmh.annotations.*
 import java.util.concurrent.TimeUnit
 
@@ -17,7 +13,7 @@ import java.util.concurrent.TimeUnit
 @Threads(1)
 @BenchmarkMode(Mode.AverageTime)
 @OutputTimeUnit(TimeUnit.SECONDS)
-open class BfsSMQBenchmark{
+open class BfsSMQBenchmark {
 
     @Benchmark
     fun testSequenceKS(config: Config) {
@@ -29,13 +25,15 @@ open class BfsSMQBenchmark{
             pSteal = config.pSteal
         ).use {
             it.waitForTermination()
-            addResultDijkstra(
+
+            addResultBfs(
                 BenchmarkResultWithMetrics(
                     "bfs", config.sourcePath, config.pSteal, config.stealSize,
                     stealingAttempts = it.stealingAttempts(),
                     failedStealing = it.failedStealing(),
                     totalTasksProcessed = it.totalTasksProcessed(),
-                    successStealing = it.successStealing()
+                    successStealing = it.successStealing(),
+                    tasksBetterThanTop = it.tasksLowerThanStolen()
                 )
             )
         }
@@ -57,7 +55,7 @@ open class BfsSMQBenchmark{
         @Param(
             "/soc-LiveJournal1.txt",
             "/USA-road-d.W.gr",
-//            "/USA-road-d.USA.gr",
+            "/USA-road-d.USA.gr",
         )
         lateinit var sourcePath: String
 
@@ -66,12 +64,7 @@ open class BfsSMQBenchmark{
 
         @Setup(Level.Trial)
         fun setup() {
-            if (getGraphName() != sourcePath) {
-                nodes = GraphReader().readGraphNodesBiDirectBfs(sourcePath)
-                update(sourcePath, nodes)
-            } else {
-                nodes = getLastSavedGraph()
-            }
+            nodes = GraphReader().readGraphNodesBiDirectBfs(sourcePath)
         }
 
         @TearDown(Level.Invocation)
@@ -81,7 +74,7 @@ open class BfsSMQBenchmark{
 
         @TearDown(Level.Trial)
         fun printAll() {
-            val results = readyResultsDijkstra
+            val results = readyResultsBfs
             val size = results.size.toDouble()
             val config = results.first()
 
@@ -89,46 +82,33 @@ open class BfsSMQBenchmark{
             val successStealing: Double = results.sumOf { it.successStealing } / size
             val failedStealing: Double = results.sumOf { it.failedStealing } / size
             val stealingAttempts: Double = results.sumOf { it.stealingAttempts } / size
+            val tasksBetterThanTop: Double = results.sumOf { it.tasksBetterThanTop } / size
 
-            println("\nDone,${config.testName},${config.pSteal},${config.graphName},${config.stealSize}," +
-                    "${totalTasksProcessed},${successStealing},${failedStealing},${stealingAttempts}")
+            println(
+                "\nDone,${config.testName},${config.pSteal},${config.graphName},${config.stealSize}," +
+                        "${totalTasksProcessed},${successStealing},${failedStealing},${stealingAttempts},${tasksBetterThanTop}"
+            )
 
-            clearMyResults()
+            clearMyResultsBfs()
         }
 
     }
 
     companion object {
 
-        private var lastSavedGraph: List<BfsIntNode> = emptyList()
-
-        private var graphName: String = ""
-
         private val results = ArrayList<BenchmarkResultWithMetrics>()
 
-        @Synchronized
-        private fun getGraphName() = graphName
-
-        @Synchronized
-        private fun getLastSavedGraph() = lastSavedGraph
-
-        @Synchronized
-        private fun update(name: String, graph: List<BfsIntNode>) {
-            lastSavedGraph = graph
-            graphName = name
-        }
-
-        private val readyResultsDijkstra: List<BenchmarkResultWithMetrics>
+        private val readyResultsBfs: List<BenchmarkResultWithMetrics>
             @Synchronized
             get() = results
 
         @Synchronized
-        private fun clearMyResults() {
+        private fun clearMyResultsBfs() {
             results.clear()
         }
 
         @Synchronized
-        private fun addResultDijkstra(result: BenchmarkResultWithMetrics) {
+        private fun addResultBfs(result: BenchmarkResultWithMetrics) {
             results.add(result)
         }
 

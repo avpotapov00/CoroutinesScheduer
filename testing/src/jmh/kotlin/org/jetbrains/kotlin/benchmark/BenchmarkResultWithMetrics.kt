@@ -13,4 +13,5 @@ data class BenchmarkResultWithMetrics(
     val successStealing: Long,
     val failedStealing: Long,
     val stealingAttempts: Long,
+    val tasksBetterThanTop: Long
 )

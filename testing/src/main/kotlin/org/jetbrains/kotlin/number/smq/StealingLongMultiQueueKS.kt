@@ -1,6 +1,5 @@
 package org.jetbrains.kotlin.number.smq
 
-import kotlinx.atomicfu.atomic
 import org.jetbrains.kotlin.generic.smq.IndexedThread
 import org.jetbrains.kotlin.number.smq.heap.GlobalHeapWithStealingBufferLongQueue
 import org.jetbrains.kotlin.number.smq.heap.HeapWithStealingBufferLongQueue

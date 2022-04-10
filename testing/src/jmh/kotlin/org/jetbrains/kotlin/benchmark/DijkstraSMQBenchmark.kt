@@ -1,10 +1,8 @@
 package org.jetbrains.kotlin.benchmark
 
 import org.jetbrains.kotlin.graph.GraphReader
-import org.jetbrains.kotlin.graph.dijkstra.BfsIntNode
 import org.jetbrains.kotlin.graph.dijkstra.IntNode
 import org.jetbrains.kotlin.graph.dijkstra.clearNodes
-import org.jetbrains.kotlin.number.scheduler.PriorityLongBfsSchedulerKS
 import org.jetbrains.kotlin.number.scheduler.PriorityLongDijkstraSchedulerKS
 import org.openjdk.jmh.annotations.*
 import java.util.concurrent.TimeUnit
@@ -28,13 +26,15 @@ open class DijkstraSMQBenchmark {
             pSteal = config.pSteal
         ).use {
             it.waitForTermination()
+
             addResultDijkstra(
                 BenchmarkResultWithMetrics(
                     "dijkstra", config.sourcePath, config.pSteal, config.stealSize,
                     stealingAttempts = it.stealingAttempts(),
                     failedStealing = it.failedStealing(),
                     totalTasksProcessed = it.totalTasksProcessed(),
-                    successStealing = it.successStealing()
+                    successStealing = it.successStealing(),
+                    tasksBetterThanTop = it.tasksLowerThanStolen()
                 )
             )
         }
@@ -56,7 +56,7 @@ open class DijkstraSMQBenchmark {
         @Param(
             "/soc-LiveJournal1.txt",
             "/USA-road-d.W.gr",
-//            "/USA-road-d.USA.gr",
+            "/USA-road-d.USA.gr",
         )
         lateinit var sourcePath: String
 
@@ -65,12 +65,7 @@ open class DijkstraSMQBenchmark {
 
         @Setup(Level.Trial)
         fun setup() {
-            if (getGraphName() != sourcePath) {
-                nodes = GraphReader().readGraphNodesBiDirect(sourcePath)
-                update(sourcePath, nodes)
-            } else {
-                nodes = getLastSavedGraph()
-            }
+            nodes = GraphReader().readGraphNodesBiDirect(sourcePath)
         }
 
         @TearDown(Level.Invocation)
@@ -88,9 +83,12 @@ open class DijkstraSMQBenchmark {
             val successStealing: Double = results.sumOf { it.successStealing } / size
             val failedStealing: Double = results.sumOf { it.failedStealing } / size
             val stealingAttempts: Double = results.sumOf { it.stealingAttempts } / size
+            val tasksBetterThanTop: Double = results.sumOf { it.tasksBetterThanTop } / size
 
-            println("\nDone,${config.testName},${config.pSteal},${config.graphName},${config.stealSize}," +
-                    "${totalTasksProcessed},${successStealing},${failedStealing},${stealingAttempts}")
+            println(
+                "\nDone,${config.testName},${config.pSteal},${config.graphName},${config.stealSize}," +
+                        "${totalTasksProcessed},${successStealing},${failedStealing},${stealingAttempts},${tasksBetterThanTop}"
+            )
 
             clearMyResults()
         }
@@ -98,22 +96,6 @@ open class DijkstraSMQBenchmark {
     }
 
     companion object {
-
-        private var lastSavedGraph: List<IntNode> = emptyList()
-
-        private var graphName: String = ""
-
-        @Synchronized
-        private fun getGraphName() = graphName
-
-        @Synchronized
-        private fun getLastSavedGraph() = lastSavedGraph
-
-        @Synchronized
-        private fun update(name: String, graph: List<IntNode>) {
-            lastSavedGraph = graph
-            graphName = name
-        }
 
         private val results = ArrayList<BenchmarkResultWithMetrics>()
 

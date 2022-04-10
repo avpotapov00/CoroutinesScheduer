@@ -107,7 +107,7 @@ open class LocalQueue<E : Comparable<E>> {
 
     @Synchronized
     fun add(task: E) {
-        _size.decrementAndGet()
+        _size.incrementAndGet()
         q.insert(task)
     }
 

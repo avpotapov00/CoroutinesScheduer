@@ -1,6 +1,7 @@
 package org.jetbrains.kotlin.number.scheduler
 
 import kotlinx.coroutines.runBlocking
+import org.jetbrains.kotlin.graph.GraphReader
 import org.jetbrains.kotlin.graph.dijkstra.IntNode
 import org.jetbrains.kotlin.graph.dijkstra.clearNodes
 import org.jetbrains.kotlin.graph.dijkstra.randomConnectedIntGraph
@@ -190,40 +191,6 @@ internal class NonBlockingLongDijkstraSchedulerTest {
         kotlin.test.assertEquals(seqRes, parRes)
     }
 
-    @Test
-    fun `parse graph`() {
-        val fileName = "E:\\Diploma\\dm-examples-master\\CoroutinesScheduer\\testing\\src\\test\\resources\\bug.txt"
-        val graph = parseGraph(fileName)
-
-        val actualLine = graph.map { it.node }.toString()
-        val expectedLine = File(fileName).readText()
-
-        kotlin.test.assertEquals(expectedLine, actualLine)
-    }
-
-}
-
-private fun parseGraph(file: String): List<IndexedNode> {
-    val text = File(file).readText()
-    val rawNodes = text.drop(1).dropLast(1).split("Node").drop(1)
-    val numbersRegexp = "[0-9]+".toRegex()
-
-    val edges = mutableListOf<FullIntEdge>()
-
-    val nodes = rawNodes.mapIndexed { index, raw ->
-        val chunked = numbersRegexp.findAll(raw).map { it.value.toInt() }.toList().chunked(2)
-        check(chunked.all { it.size == 2 }) { "Illegal chunc size" }
-
-        chunked.forEach { (to, weight) -> edges.add(FullIntEdge(index, to, weight)) }
-
-        IndexedNode(index, IntNode())
-    }
-
-    edges.forEach { (from, to, w) ->
-        nodes[from].node.addEdge(to, w)
-    }
-
-    return nodes
 }
 
 

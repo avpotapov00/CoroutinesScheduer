@@ -144,7 +144,7 @@ internal class PriorityLongDijkstraSchedulerTest {
         testOnRandomGraphs(100, 1000)
     }
 
-    @Test
+    @RepeatedTest(10)
     @Timeout(100_000)
     fun `test on big graphs`() {
         testOnBigRandomGraphs(10000, 100000)
@@ -194,53 +194,7 @@ internal class PriorityLongDijkstraSchedulerTest {
         }
     }
 
-    @Test
-    fun `parse graph`() {
-        val fileName = "E:\\Diploma\\dm-examples-master\\CoroutinesScheduer\\testing\\src\\test\\resources\\bug.txt"
-        val graph = parseGraph(fileName)
-
-        val actualLine = graph.map { it.node }.toString()
-        val expectedLine = File(fileName).readText()
-
-        assertEquals(expectedLine, actualLine)
-    }
-
 }
-
-private fun parseGraph(file: String): List<IndexedNode> {
-    val text = File(file).readText()
-    val rawNodes = text.drop(1).dropLast(1).split("Node").drop(1)
-    val numbersRegexp = "[0-9]+".toRegex()
-
-    val edges = mutableListOf<FullIntEdge>()
-
-    val nodes = rawNodes.mapIndexed { index, raw ->
-        val chunked = numbersRegexp.findAll(raw).map { it.value.toInt() }.toList().chunked(2)
-        check(chunked.all { it.size == 2 }) { "Illegal chunc size" }
-
-        chunked.forEach { (to, weight) -> edges.add(FullIntEdge(index, to, weight)) }
-
-        IndexedNode(index, IntNode())
-    }
-
-    edges.forEach { (from, to, w) ->
-        nodes[from].node.addEdge(to, w)
-    }
-
-    return nodes
-}
-
-
-private data class IndexedNode(
-    val index: Int,
-    val node: IntNode,
-)
-
-private data class FullIntEdge(
-    val from: Int,
-    val to: Int,
-    val weight: Int,
-)
 
 private const val GRAPHS = 10
 private const val SEARCHES = 100
