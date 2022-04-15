@@ -7,7 +7,7 @@ import org.jetbrains.kotlin.graph.util.IntPhaser
 import org.jetbrains.kotlin.generic.priority.Priority
 import kotlin.math.abs
 
-fun pagerankAsyncPush(nodes: List<Node>, dense: Float, epsilon: Float, dispatcher: CoroutineDispatcher) {
+fun pagerankAsyncPush(nodes: List<PageRankIntNode>, dense: Float, epsilon: Float, dispatcher: CoroutineDispatcher) {
 
     val initialValue = 1f / nodes.size
     nodes.forEach { it.clear(initialValue) }
@@ -19,7 +19,7 @@ fun pagerankAsyncPush(nodes: List<Node>, dense: Float, epsilon: Float, dispatche
         node.rank = (1 - dense) * dense * node.rank
     }
 
-    fun processNode(node: Node) {
+    fun processNode(node: PageRankIntNode) {
         val nodeR = node.rank
         node.rank = 0f
 
@@ -57,13 +57,13 @@ fun pagerankAsyncPush(nodes: List<Node>, dense: Float, epsilon: Float, dispatche
 }
 
 
-fun pagerankAsync(nodes: List<Node>, dense: Float, epsilon: Float, dispatcher: CoroutineDispatcher) {
+fun pagerankAsync(nodes: List<PageRankIntNode>, dense: Float, epsilon: Float, dispatcher: CoroutineDispatcher) {
     val initialValue = 1f / nodes.size
     nodes.forEach { it.clear(initialValue) }
 
     val phaser = IntPhaser()
 
-    fun processNode(node: Node) {
+    fun processNode(node: PageRankIntNode) {
         val newRank = 1 - dense + dense * node.incomingEdges.map { it.impact }.sum()
 
         var oldRank = node.rank

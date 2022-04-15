@@ -1,6 +1,7 @@
 package org.jetbrains.kotlin.number.scheduler
 
 import org.jetbrains.kotlin.generic.smq.IndexedThread
+import org.jetbrains.kotlin.graph.dijkstra.BfsIntNode
 import org.jetbrains.kotlin.graph.dijkstra.IntNode
 import org.jetbrains.kotlin.number.smq.StealingLongMultiQueueKS
 import org.jetbrains.kotlin.util.firstFromLong
@@ -15,8 +16,8 @@ import java.util.concurrent.ThreadLocalRandom
  * @author Потапов Александр
  * @since 01.04.2022
  */
-class NonBlockingLongDijkstraScheduler(
-    private val nodes: List<IntNode>,
+class NonBlockingLongBfsScheduler(
+    private val nodes: List<BfsIntNode>,
     startIndex: Int,
     val poolSize: Int,
     val stealSize: Int = 3,
@@ -184,18 +185,18 @@ class NonBlockingLongDijkstraScheduler(
             return Long.MIN_VALUE
         }
 
-        private fun tryUpdate(cur: IntNode) {
+        private fun tryUpdate(cur: BfsIntNode) {
             for (e in cur.outgoingEdges) {
 
-                val to = nodes[e.to]
+                val to = nodes[e]
 
-                while (cur.distance + e.weight < to.distance) {
+                while (cur.distance + 1 < to.distance) {
                     val currDist = cur.distance
                     val toDist = to.distance
-                    val nextDist = currDist + e.weight
+                    val nextDist = currDist + 1
 
                     if (toDist > nextDist && to.casDistance(toDist, nextDist)) {
-                        val task = nextDist.zip(e.to)
+                        val task = nextDist.zip(e)
 
                         insert(task)
                         break
@@ -238,3 +239,9 @@ class NonBlockingLongDijkstraScheduler(
     }
 
 }
+
+// The threshold of tasks in the thread queue after which other threads must be woken up
+private const val TASKS_COUNT_WAKE_THRESHOLD = 30
+
+// The number of cells that we will look at trying to wake up the thread
+private const val WAKE_RETRY_COUNT = 5

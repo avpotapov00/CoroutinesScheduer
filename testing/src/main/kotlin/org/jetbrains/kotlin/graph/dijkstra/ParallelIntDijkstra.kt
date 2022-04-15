@@ -1,8 +1,8 @@
 package org.jetbrains.kotlin.graph.dijkstra
 
 import kotlinx.atomicfu.atomic
+import org.jetbrains.kotlin.graph.pagerank.AtomicFloat
 import java.util.*
-import kotlin.collections.ArrayList
 
 class IntNode {
     private val _distance = atomic(Integer.MAX_VALUE)
@@ -14,6 +14,55 @@ class IntNode {
         }
 
     fun casDistance(cur: Int, update: Int) = _distance.compareAndSet(cur, update)
+
+    val outgoingEdges: List<IntEdge> get() = edges
+
+    private val edges: MutableList<IntEdge> = arrayListOf()
+
+    fun addEdge(to: Int, weight: Int) {
+        edges.add(IntEdge(to, weight))
+    }
+
+    override fun toString(): String {
+        return "Node(${edges.joinToString(separator = ",") { "{${it.to},${it.weight}}" }})"
+    }
+
+}
+
+class FloatNode(
+    initial: Float
+) {
+    private val _residual = AtomicFloat(initial)
+
+    var residual
+        get() = _residual.value
+        set(value) {
+            _residual.value = value
+        }
+
+    fun exchange(nextValue: Float): Float {
+        var prev: Float
+        do {
+            prev = _residual.value
+        } while (!_residual.compareAndSet(prev, nextValue))
+
+        return prev
+    }
+
+    fun atomicAdd(value: Float): Float {
+        var current: Float
+        do {
+          current = _residual.value
+        } while (!_residual.compareAndSet(current, current + value))
+
+        return current
+    }
+
+    var nodesCount = 0
+
+    fun setNodesCount() {
+        nodesCount = outgoingEdges.size
+    }
 
     val outgoingEdges: List<IntEdge> get() = edges
 

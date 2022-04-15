@@ -1,6 +1,7 @@
 package org.jetbrains.kotlin.graph
 
 import org.jetbrains.kotlin.graph.dijkstra.BfsIntNode
+import org.jetbrains.kotlin.graph.dijkstra.FloatNode
 import org.jetbrains.kotlin.graph.dijkstra.IntNode
 import java.io.BufferedReader
 import java.io.File
@@ -51,6 +52,50 @@ class GraphReader {
         File(fileName).bufferedReader().use { reader ->
                 return readNodes(reader)
             }
+    }
+
+    fun readGraphFloatNodesBiDirect(fileName: String): List<FloatNode> {
+        this::class.java.getResourceAsStream(fileName)!!
+            .bufferedReader().use { reader ->
+                return readFloatNodes(reader)
+            }
+    }
+
+    fun readGraphFloatNodesBiDirectFromFile(fileName: String): List<FloatNode> {
+        File(fileName).bufferedReader().use { reader ->
+            return readFloatNodes(reader)
+        }
+    }
+
+    private fun readFloatNodes(reader: BufferedReader): List<FloatNode> {
+        var line = reader.readLine()
+        while (line.startsWith("c")) {
+            line = reader.readLine()
+        }
+        check(line.startsWith("p sp "))
+        val count = line.split(" ")[2].toInt()
+
+        val nodes = ArrayList<FloatNode>(count)
+        repeat((0 until count).count()) { nodes.add(FloatNode(0f)) }
+
+        do {
+            line = reader.readLine()
+        } while (line.startsWith("c"))
+
+        while (line != null) {
+            val (_, fromStr, toStr, w) = line.split(" ")
+            val from = fromStr.toInt() - 1
+            val to = toStr.toInt() - 1
+            val weight = w.toInt()
+
+            nodes[from].addEdge(to, weight)
+
+            line = reader.readLine()
+        }
+
+        nodes.forEach { it.setNodesCount() }
+
+        return nodes
     }
 
     private fun readNodes(reader: BufferedReader): List<IntNode> {

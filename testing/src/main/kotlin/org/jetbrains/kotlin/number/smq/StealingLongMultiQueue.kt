@@ -1,14 +1,11 @@
 package org.jetbrains.kotlin.number.smq
 
-import kotlinx.atomicfu.atomic
 import org.jetbrains.kotlin.generic.smq.IndexedThread
 import org.jetbrains.kotlin.number.smq.heap.GlobalHeapWithStealingBufferLongQueue
 import org.jetbrains.kotlin.number.smq.heap.HeapWithStealingBufferLongQueue
 import org.jetbrains.kotlin.number.smq.heap.StealingLongQueue
 import org.jetbrains.kotlin.util.firstFromLong
-import org.jetbrains.kotlin.util.secondFromLong
 import java.util.concurrent.ThreadLocalRandom
-import kotlin.system.exitProcess
 
 open class StealingLongMultiQueue (
     stealSize: Int,

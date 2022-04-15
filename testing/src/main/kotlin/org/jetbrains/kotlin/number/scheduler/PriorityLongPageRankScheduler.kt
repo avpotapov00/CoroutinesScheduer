@@ -1,7 +1,11 @@
 package org.jetbrains.kotlin.number.scheduler
 
+import kotlinx.atomicfu.AtomicArray
+import kotlinx.atomicfu.AtomicRef
+import kotlinx.atomicfu.atomic
+import kotlinx.atomicfu.atomicArrayOfNulls
 import org.jetbrains.kotlin.generic.smq.IndexedThread
-import org.jetbrains.kotlin.graph.dijkstra.IntNode
+import org.jetbrains.kotlin.graph.dijkstra.FloatNode
 import org.jetbrains.kotlin.number.smq.StealingLongMultiQueueKS
 import org.jetbrains.kotlin.util.firstFromLong
 import org.jetbrains.kotlin.util.indexedBinarySearch
@@ -10,19 +14,22 @@ import org.jetbrains.kotlin.util.zip
 import java.io.Closeable
 import java.util.concurrent.Phaser
 import java.util.concurrent.ThreadLocalRandom
+import java.util.concurrent.locks.LockSupport
 
 /**
  * @author Потапов Александр
- * @since 01.04.2022
+ * @since 14.04.2022
  */
-class NonBlockingLongDijkstraScheduler(
-    private val nodes: List<IntNode>,
-    startIndex: Int,
+class PriorityLongPageRankScheduler(
+    private val nodes: List<FloatNode>,
+    val tolerance: Float = 1.0e-3f,
+    val alpha: Float = 0.85f,
     val poolSize: Int,
     val stealSize: Int = 3,
     pSteal: Double = 0.04,
-    // The number of attempts to take a task from one thread
-    private val retryCount: Int = 100
+// The number of attempts to take a task from one thread
+    private val retryCount: Int = 100,
+    private val initResidual: Float = 1 - alpha
 ) : StealingLongMultiQueueKS(stealSize, pSteal, poolSize), Closeable {
 
     /**
@@ -36,24 +43,32 @@ class NonBlockingLongDijkstraScheduler(
      */
     var threads: List<Worker> = (0 until poolSize).map { index -> Worker(index) }
 
+    /**
+     * Buffer for the freshest sleeping stream
+     */
+    private val sleepingBox: AtomicRef<Worker?> = atomic(null)
+
+    /**
+     * Array where sleeping threads are stored
+     */
+    private val sleepingArray: AtomicArray<Worker?> = atomicArrayOfNulls(poolSize * 2)
+
     val finishPhaser = Phaser(poolSize + 1)
 
     init {
-        insertGlobal(0.zip(startIndex))
+        nodes.forEachIndexed { index, node ->
+            node.residual = initResidual
+            insertGlobal(1.zip(index))
+        }
 
-
-        nodes[startIndex].distance = 0
         threads.forEach { it.start() }
     }
-
 
     fun waitForTermination() {
         finishPhaser.arriveAndAwaitAdvance()
     }
 
     inner class Worker(override val index: Int) : IndexedThread() {
-
-        private var locked = false
 
         var totalTasksProcessed: Long = 0
 
@@ -76,10 +91,6 @@ class NonBlockingLongDijkstraScheduler(
 
                 if (task != Long.MIN_VALUE) {
                     attempts = 0
-                    if (locked) {
-                        finishPhaser.register()
-                        locked = false
-                    }
                     totalTasksProcessed++
                     tryUpdate(nodes[task.secondFromLong])
                     continue
@@ -94,10 +105,6 @@ class NonBlockingLongDijkstraScheduler(
                 task = stealAndDeleteFromGlobal()
 
                 if (task != Long.MIN_VALUE) {
-                    if (locked) {
-                        finishPhaser.register()
-                        locked = false
-                    }
                     attempts = 0
                     tryUpdate(nodes[task.secondFromLong])
                     continue
@@ -107,20 +114,14 @@ class NonBlockingLongDijkstraScheduler(
                 task = stealAndDeleteFromSelf()
 
                 if (task != Long.MIN_VALUE) {
-                    if (locked) {
-                        finishPhaser.register()
-                        locked = false
-                    }
                     attempts = 0
                     totalTasksProcessed++
                     tryUpdate(nodes[task.secondFromLong])
                     continue
                 }
 
-                if (!locked) {
-                    finishPhaser.arriveAndDeregister()
-                }
-                locked = true
+                goWait()
+                attempts = 0
             }
         }
 
@@ -184,23 +185,79 @@ class NonBlockingLongDijkstraScheduler(
             return Long.MIN_VALUE
         }
 
-        private fun tryUpdate(cur: IntNode) {
-            for (e in cur.outgoingEdges) {
+        private fun goWait() {
+            var oldThread: Worker?
 
-                val to = nodes[e.to]
+            do {
+                oldThread = sleepingBox.value
+            } while (!sleepingBox.compareAndSet(oldThread, this))
 
-                while (cur.distance + e.weight < to.distance) {
-                    val currDist = cur.distance
-                    val toDist = to.distance
-                    val nextDist = currDist + e.weight
+            do {
+                val index = random.nextInt(0, sleepingArray.size)
+                val cell = sleepingArray[index].value
+            } while (!sleepingArray[index].compareAndSet(cell, oldThread))
 
-                    if (toDist > nextDist && to.casDistance(toDist, nextDist)) {
-                        val task = nextDist.zip(e.to)
+            finishPhaser.arriveAndDeregister()
+            LockSupport.park()
+            finishPhaser.register()
+        }
 
-                        insert(task)
-                        break
+        private fun checkWakeThread() {
+            // if the number of tasks in the local queue is more than the threshold, try to wake up a new thread
+            if (size() > TASKS_COUNT_WAKE_THRESHOLD) {
+                tryWakeThread()
+            }
+        }
+
+        private fun tryWakeThread() {
+            var recentWorker = sleepingBox.value
+
+            // if found a thread in sleeping box, trying to get it, or go further, if someone has taken it earlier
+            while (recentWorker != null) {
+                if (sleepingBox.compareAndSet(recentWorker, null)) {
+                    LockSupport.unpark(recentWorker)
+                    return
+                }
+                recentWorker = sleepingBox.value
+            }
+
+            // Try to get a thread from the array several times
+            for (i in 0 until WAKE_RETRY_COUNT) {
+                val index = ThreadLocalRandom.current().nextInt(0, sleepingArray.size)
+                recentWorker = sleepingArray[index].value
+
+                if (recentWorker != null && sleepingArray[index].compareAndSet(recentWorker, null)) {
+                    LockSupport.unpark(recentWorker)
+                    return
+                }
+            }
+        }
+
+        private fun tryUpdate(cur: FloatNode) {
+            if (cur.residual <= tolerance) {
+                return
+            }
+
+            val oldResidual = cur.exchange(0.0f)
+            val srcNout = cur.nodesCount
+            var updateWas = false
+
+            if (srcNout > 0) {
+                val delta = oldResidual * alpha / srcNout
+
+                for (edge in cur.outgoingEdges) {
+                    val dst = nodes[edge.to]
+                    val old = dst.atomicAdd(delta)
+
+                    if ((old < tolerance) || (old + delta >= tolerance)) {
+                        insert(1.zip(edge.to))
+                        updateWas = true
                     }
                 }
+            }
+
+            if (updateWas) {
+                checkWakeThread()
             }
         }
 
@@ -238,3 +295,9 @@ class NonBlockingLongDijkstraScheduler(
     }
 
 }
+
+// The threshold of tasks in the thread queue after which other threads must be woken up
+private const val TASKS_COUNT_WAKE_THRESHOLD = 30
+
+// The number of cells that we will look at trying to wake up the thread
+private const val WAKE_RETRY_COUNT = 5

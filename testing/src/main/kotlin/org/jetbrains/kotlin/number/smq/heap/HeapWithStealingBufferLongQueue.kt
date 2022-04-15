@@ -2,15 +2,22 @@ package org.jetbrains.kotlin.number.smq.heap
 
 import kotlinx.atomicfu.AtomicInt
 import kotlinx.atomicfu.atomic
+import org.jetbrains.kotlin.number.scheduler.AdaptivePriorityLongDijkstraScheduler
 import java.util.*
 
 class HeapWithStealingBufferLongQueue(
-    private val stealSize: Int
+    var stealSize: Int
 ) : StealingLongQueue {
 
     private val q = PriorityLongQueue(4)
 
     private val _size = atomic(0)
+
+    private var nextStealSize = stealSize
+
+    fun setNextStealSize(next: Int) {
+        nextStealSize = next
+    }
 
     val size: Int
         get() {
@@ -42,7 +49,7 @@ class HeapWithStealingBufferLongQueue(
 
     private val state: AtomicInt = atomic(0 or bit)
 
-    private val array = LongArray(stealSize)
+    private val array = LongArray(1024)
 
     private val bufferSize = atomic(0) // TODO: do you need it?
 
@@ -85,6 +92,9 @@ class HeapWithStealingBufferLongQueue(
 
     private fun fillBuffer() { // stolen = true
         clearBuffer()
+        if (nextStealSize != stealSize) {
+            stealSize = nextStealSize
+        }
         for (i in 0 until stealSize) {
             val task = extractTop()
             if (task == Long.MIN_VALUE) break

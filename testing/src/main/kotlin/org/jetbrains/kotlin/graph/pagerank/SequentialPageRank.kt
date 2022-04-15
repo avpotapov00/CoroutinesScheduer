@@ -1,10 +1,11 @@
 package org.jetbrains.kotlin.graph.pagerank
 
+import org.jetbrains.kotlin.graph.GraphReader
 import java.util.*
 import kotlin.math.abs
 
 
-fun pagerankSequential(nodes: List<Node>, dense: Float, epsilon: Float) {
+fun pagerankSequential(nodes: List<PageRankIntNode>, dense: Float, epsilon: Float) {
     val queue = PriorityQueue(NODE_RANK_COMPARATOR)
 
     val initialValue = 1f / nodes.size
@@ -29,3 +30,12 @@ fun pagerankSequential(nodes: List<Node>, dense: Float, epsilon: Float) {
     }
 
 }
+
+fun main() {
+    val graph =
+        GraphReader().readGraphNodesBiDirectFromFile("/Users/aleksandrpotapov/Documents/CoroutinesScheduer/testing/src/jmh/resources/USA-road-d.W.gr")
+
+
+
+}
+

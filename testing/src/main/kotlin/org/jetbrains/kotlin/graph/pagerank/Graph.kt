@@ -2,14 +2,14 @@ package org.jetbrains.kotlin.graph.pagerank
 
 import org.jetbrains.kotlin.graph.util.nodes.RankedNode
 
-val NODE_RANK_COMPARATOR = Comparator<Node> { o1, o2 -> o1.rank.compareTo(o2.rank) }
+val NODE_RANK_COMPARATOR = Comparator<PageRankIntNode> { o1, o2 -> o1.rank.compareTo(o2.rank) }
 
-open class Node(
+open class PageRankIntNode(
     initialRank: Float
 ): RankedNode<Float> {
-    val outgoingEdges = arrayListOf<Node>()
+    val outgoingEdges = arrayListOf<PageRankIntNode>()
 
-    val incomingEdges = arrayListOf<Node>()
+    val incomingEdges = arrayListOf<PageRankIntNode>()
 
     private val _rank = AtomicFloat(initialRank)
     override var rank
@@ -23,7 +23,7 @@ open class Node(
 
     fun casRank(cur: Float, update: Float) = _rank.compareAndSet(cur, update)
 
-    fun addEdge(to: Node) {
+    fun addEdge(to: PageRankIntNode) {
         to.incomingEdges.add(this)
         outgoingEdges.add(to)
     }
@@ -33,6 +33,6 @@ open class Node(
     }
 }
 
-fun clearNodes(value: Float, nodes: List<Node>) {
+fun clearNodes(value: Float, nodes: List<PageRankIntNode>) {
     nodes.forEach { it.clear(value) }
 }

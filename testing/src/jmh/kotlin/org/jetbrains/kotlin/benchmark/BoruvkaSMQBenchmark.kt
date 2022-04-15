@@ -25,13 +25,18 @@
 //            stealSize = config.stealSize,
 //            pSteal = config.pSteal
 //        )
-//        addResult(
-//            BenchmarkResultWithMetrics(
-//                "mst_ks", config.sourcePath, config.pSteal, config.stealSize,
-//                it.retrievalsS.sumOf { counter -> counter.value.toLong() },
-//                result.first.successSteals.value.toLong()
-//            )
-//        )
+//        val scheduler = result.first
+//
+////        addResultBoruvka(
+////            BenchmarkResultWithMetrics(
+////                "dijkstra", config.sourcePath, config.pSteal, config.stealSize,
+////                stealingAttempts = scheduler.stealingAttempts(),
+////                failedStealing = scheduler.failedStealing(),
+////                totalTasksProcessed = scheduler.totalTasksProcessed(),
+////                successStealing = scheduler.successStealing(),
+////                tasksBetterThanTop = scheduler.tasksLowerThanStolen()
+////            )
+////        )
 //    }
 //
 //    @State(Scope.Thread)
@@ -66,15 +71,22 @@
 //
 //        @TearDown(Level.Trial)
 //        fun printAll() {
-//            val results = readyResults
+//            val results = readyResultsBoruvka
 //            val size = results.size.toDouble()
-//            val avgSuccess = results.sumOf { it.successSteals } / size
-//            val avgRetrievals = results.sumOf { it.retrievals } / size
 //            val config = results.first()
 //
-//            println("\nDone,${config.testName},${config.pSteal},${config.graphName},${config.stealSize},${avgRetrievals},${avgSuccess}")
+//            val totalTasksProcessed: Double = results.sumOf { it.totalTasksProcessed } / size
+//            val successStealing: Double = results.sumOf { it.successStealing } / size
+//            val failedStealing: Double = results.sumOf { it.failedStealing } / size
+//            val stealingAttempts: Double = results.sumOf { it.stealingAttempts } / size
+//            val tasksBetterThanTop: Double = results.sumOf { it.tasksBetterThanTop } / size
 //
-//            clearResults()
+//            println(
+//                "\nDone,${config.testName},${config.pSteal},${config.graphName},${config.stealSize}," +
+//                        "${totalTasksProcessed},${successStealing},${failedStealing},${stealingAttempts},${tasksBetterThanTop}"
+//            )
+//
+//            clearResultsBoruvka()
 //        }
 //
 //    }
@@ -83,17 +95,17 @@
 //
 //        private val results = ArrayList<BenchmarkResultWithMetrics>()
 //
-//        val readyResults: List<BenchmarkResultWithMetrics>
+//        val readyResultsBoruvka: List<BenchmarkResultWithMetrics>
 //            @Synchronized
 //            get() = results
 //
 //        @Synchronized
-//        fun clearResults() {
+//        fun clearResultsBoruvka() {
 //            results.clear()
 //        }
 //
 //        @Synchronized
-//        fun addResult(result: BenchmarkResultWithMetrics) {
+//        fun addResultBoruvka(result: BenchmarkResultWithMetrics) {
 //            results.add(result)
 //        }
 //

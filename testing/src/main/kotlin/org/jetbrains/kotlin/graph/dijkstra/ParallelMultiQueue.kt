@@ -6,9 +6,9 @@ import kotlin.random.Random
 
 class ParallelMultiQueue<T>(n: Int, private val comparator: Comparator<in T>) {
 
-    private val queues: ArrayList<PriorityQueue<T>> = arrayListOf()
+    val queues: ArrayList<PriorityQueue<T>> = arrayListOf()
 
-    private val locks: ArrayList<ReentrantLock> = arrayListOf()
+    val locks: ArrayList<ReentrantLock> = arrayListOf()
 
     init {
         for (i in 1..(2 * n)) {

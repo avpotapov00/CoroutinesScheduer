@@ -1,7 +1,7 @@
 package org.jetbrains.kotlin.number.scheduler
 
 import org.jetbrains.kotlin.generic.smq.IndexedThread
-import org.jetbrains.kotlin.graph.dijkstra.IntNode
+import org.jetbrains.kotlin.graph.dijkstra.FloatNode
 import org.jetbrains.kotlin.number.smq.StealingLongMultiQueueKS
 import org.jetbrains.kotlin.util.firstFromLong
 import org.jetbrains.kotlin.util.indexedBinarySearch
@@ -11,18 +11,16 @@ import java.io.Closeable
 import java.util.concurrent.Phaser
 import java.util.concurrent.ThreadLocalRandom
 
-/**
- * @author Потапов Александр
- * @since 01.04.2022
- */
-class NonBlockingLongDijkstraScheduler(
-    private val nodes: List<IntNode>,
-    startIndex: Int,
+class NonBlockingPriorityLongPageRankScheduler(
+    private val nodes: List<FloatNode>,
+    val tolerance: Float = 1.0e-3f,
+    val alpha: Float = 0.85f,
     val poolSize: Int,
     val stealSize: Int = 3,
     pSteal: Double = 0.04,
-    // The number of attempts to take a task from one thread
-    private val retryCount: Int = 100
+// The number of attempts to take a task from one thread
+    private val retryCount: Int = 100,
+    private val initResidual: Float = 1 - alpha
 ) : StealingLongMultiQueueKS(stealSize, pSteal, poolSize), Closeable {
 
     /**
@@ -39,10 +37,13 @@ class NonBlockingLongDijkstraScheduler(
     val finishPhaser = Phaser(poolSize + 1)
 
     init {
-        insertGlobal(0.zip(startIndex))
+        val initPriority = toPriority(initResidual)
 
+        nodes.forEachIndexed { index, node ->
+            node.residual = initResidual
+            insertGlobal(initPriority.zip(index))
+        }
 
-        nodes[startIndex].distance = 0
         threads.forEach { it.start() }
     }
 
@@ -184,21 +185,31 @@ class NonBlockingLongDijkstraScheduler(
             return Long.MIN_VALUE
         }
 
-        private fun tryUpdate(cur: IntNode) {
-            for (e in cur.outgoingEdges) {
+        private fun tryUpdate(cur: FloatNode) {
+            if (cur.residual <= tolerance) {
+                return
+            }
 
-                val to = nodes[e.to]
+            val oldResidual = cur.exchange(0.0f)
+//            println(oldResidual)
 
-                while (cur.distance + e.weight < to.distance) {
-                    val currDist = cur.distance
-                    val toDist = to.distance
-                    val nextDist = currDist + e.weight
+            val srcNout = cur.nodesCount
 
-                    if (toDist > nextDist && to.casDistance(toDist, nextDist)) {
-                        val task = nextDist.zip(e.to)
+            if (srcNout > 0) {
+                val delta = oldResidual * alpha / srcNout
 
-                        insert(task)
-                        break
+                if (delta <= 0) return
+
+                for (edge in cur.outgoingEdges) {
+                    val dst = nodes[edge.to]
+                    val old = dst.atomicAdd(delta)
+
+                    val newResidual = old + delta
+
+                    if ((old < tolerance) || (newResidual >= tolerance)) {
+
+                        val priority = toPriority(newResidual)
+                        insert(priority.zip(edge.to))
                     }
                 }
             }
@@ -208,6 +219,10 @@ class NonBlockingLongDijkstraScheduler(
             queues[index].addLocal(task)
         }
 
+    }
+
+    fun toPriority(residual: Float): Int {
+        return (residual * residualToPriorityFactor).toInt()
     }
 
 
@@ -238,3 +253,5 @@ class NonBlockingLongDijkstraScheduler(
     }
 
 }
+
+private const val residualToPriorityFactor = 100_000
