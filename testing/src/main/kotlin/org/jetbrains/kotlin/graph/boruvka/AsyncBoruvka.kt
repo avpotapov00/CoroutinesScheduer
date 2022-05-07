@@ -9,7 +9,9 @@ import kotlinx.coroutines.*
 import org.jetbrains.kotlin.generic.priority.Priority
 import org.jetbrains.kotlin.graph.dijkstra.IntNode
 import org.jetbrains.kotlin.graph.util.edges.Edge
+import org.jetbrains.kotlin.graph.util.edges.EdgeIndexed
 import org.jetbrains.kotlin.graph.util.edges.Graph
+import org.jetbrains.kotlin.graph.util.edges.GraphIndexed
 import org.jetbrains.kotlin.graph.util.nodes.Node
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReferenceArray
@@ -75,17 +77,17 @@ suspend fun asyncBoruvka(nodes: Int, edges: List<Edge>, dispatcher: CoroutineDis
 }
 
 
-suspend fun asyncBoruvkaGlobalScope(nodes: Int, edges: List<Edge>): Set<Edge> {
+suspend fun asyncBoruvkaGlobalScope(nodes: Int, edges: List<EdgeIndexed>): Set<EdgeIndexed> {
 
-    val edgesSet = ConcurrentHashMap.newKeySet<Edge>()
-    val mst = ConcurrentHashMap.newKeySet<Edge>()
+    val edgesSet = ConcurrentHashMap.newKeySet<EdgeIndexed>()
+    val mst = ConcurrentHashMap.newKeySet<EdgeIndexed>()
     val dsu = ParallelDsu(nodes)
 
     edgesSet.addAll(edges)
 
     while (mst.size < nodes - 1) {
 
-        val shortestPaths: AtomicReferenceArray<Edge> = AtomicReferenceArray(nodes)
+        val shortestPaths: AtomicReferenceArray<EdgeIndexed> = AtomicReferenceArray(nodes)
 
         edgesSet.map { edge ->
             GlobalScope.launch {
@@ -164,7 +166,7 @@ fun intNodesToNodes(nodes: List<IntNode>): List<Node> {
     return result
 }
 
-fun intNodesToEdges(nodes: List<IntNode>): Graph {
+fun intNodesToEdges(nodes: List<IntNode>): GraphIndexed {
     val visited = hashSetOf<Int>()
 
     val indexedNodes = nodes.withIndex().toList()
@@ -179,5 +181,5 @@ fun intNodesToEdges(nodes: List<IntNode>): Graph {
         visited.add(indexFrom)
     }
 
-    return Graph(nodes.size, result)
+    return GraphIndexed(nodes.size, result.mapIndexed { index, edge -> EdgeIndexed(index, edge.from, edge.to, edge.weight) })
 }

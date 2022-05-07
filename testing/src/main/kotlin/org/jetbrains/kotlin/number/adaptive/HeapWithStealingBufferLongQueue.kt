@@ -1,11 +1,13 @@
-package org.jetbrains.kotlin.number.smq.heap
+package org.jetbrains.kotlin.number.adaptive
 
 import kotlinx.atomicfu.AtomicInt
 import kotlinx.atomicfu.atomic
+import org.jetbrains.kotlin.number.smq.heap.PriorityLongQueue
+import org.jetbrains.kotlin.number.smq.heap.StealingLongQueue
 import java.util.*
 import kotlin.math.min
 
-class HeapWithStealingBufferLongQueue(
+class AdaptiveHeapWithStealingBufferLongQueue(
     var stealSize: Int
 ) : StealingLongQueue {
 
@@ -56,7 +58,7 @@ class HeapWithStealingBufferLongQueue(
 
     private val state: AtomicInt = atomic(0 or bit)
 
-    private val array = LongArray(stealSize)
+    private val array = LongArray(1024)
 
     private val bufferSize = atomic(0) // TODO: do you need it?
 
@@ -186,6 +188,10 @@ class HeapWithStealingBufferLongQueue(
 
     private fun fillBuffer() { // stolen = true
         // Если у нас самих недостаточно элементов, то не заполняем буффер
+        if (stealSize != nextStealSize) {
+            stealSize = nextStealSize
+        }
+
         val queueSize = _size.value
         val fillingSize = min(stealSize, queueSize / 2)
         if (fillingSize == 0) return

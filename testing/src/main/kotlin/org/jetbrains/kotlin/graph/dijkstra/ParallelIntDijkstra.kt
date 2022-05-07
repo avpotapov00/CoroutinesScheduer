@@ -4,7 +4,9 @@ import kotlinx.atomicfu.atomic
 import org.jetbrains.kotlin.graph.pagerank.AtomicFloat
 import java.util.*
 
-class IntNode {
+data class IntNode(
+    private val edges: MutableList<IntEdge> = arrayListOf()
+) {
     private val _distance = atomic(Integer.MAX_VALUE)
 
     var distance
@@ -17,16 +19,9 @@ class IntNode {
 
     val outgoingEdges: List<IntEdge> get() = edges
 
-    private val edges: MutableList<IntEdge> = arrayListOf()
-
     fun addEdge(to: Int, weight: Int) {
         edges.add(IntEdge(to, weight))
     }
-
-    override fun toString(): String {
-        return "Node(${edges.joinToString(separator = ",") { "{${it.to},${it.weight}}" }})"
-    }
-
 }
 
 class FloatNode(

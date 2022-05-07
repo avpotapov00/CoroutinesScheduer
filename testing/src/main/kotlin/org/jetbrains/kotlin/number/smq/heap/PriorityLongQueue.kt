@@ -1,14 +1,15 @@
 package org.jetbrains.kotlin.number.smq.heap
 
 import org.jetbrains.kotlin.util.firstFromLong
+import kotlin.math.min
 
 class PriorityLongQueue(
     private val arity: Int,
     initialCapacity: Int = DEFAULT_INITIAL_CAPACITY,
 ) {
     private var maxIndex: Int = -1
-    private var queue: LongArray = LongArray(initialCapacity)
 
+    var queue: LongArray = LongArray(initialCapacity)
 
     fun insert(element: Long) {
         grow()
@@ -100,6 +101,20 @@ class PriorityLongQueue(
                     + if (queue.size < 64) (queue.size + 1) else queue.size shr 1)
             queue = queue.copyOf(newCapacity)
         }
+    }
+
+    fun getSecondTop(): Long {
+        if (maxIndex < 1) return Long.MIN_VALUE
+        var min = queue[1]
+
+        for (i in 2 .. min(maxIndex, 4)) {
+            val next = queue[i]
+            if (min.firstFromLong > next.firstFromLong) {
+                min = next
+            }
+        }
+
+        return min
     }
 
     companion object {

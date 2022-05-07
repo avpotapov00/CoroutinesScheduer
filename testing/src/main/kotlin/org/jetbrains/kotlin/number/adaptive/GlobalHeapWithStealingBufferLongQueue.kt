@@ -1,8 +1,10 @@
-package org.jetbrains.kotlin.number.smq.heap
+package org.jetbrains.kotlin.number.adaptive
 
 import kotlinx.atomicfu.atomic
+import org.jetbrains.kotlin.number.smq.heap.PriorityLongQueue
+import org.jetbrains.kotlin.number.smq.heap.StealingLongQueue
 
-class GlobalHeapWithStealingBufferLongQueue(
+class AdaptiveGlobalHeapWithStealingBufferLongQueue(
     private val stealSize: Int
 ) : StealingLongQueue {
 

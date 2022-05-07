@@ -1,7 +1,6 @@
 package org.jetbrains.kotlin.number.scheduler
 
 import kotlinx.coroutines.runBlocking
-import org.jetbrains.kotlin.graph.GraphReader
 import org.jetbrains.kotlin.graph.dijkstra.IntNode
 import org.jetbrains.kotlin.graph.dijkstra.clearNodes
 import org.jetbrains.kotlin.graph.dijkstra.randomConnectedIntGraph
@@ -11,7 +10,6 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.RepeatedTest
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import java.io.File
 import kotlin.random.Random
 
 internal class NonBlockingLongDijkstraSchedulerTest {
@@ -105,7 +103,7 @@ internal class NonBlockingLongDijkstraSchedulerTest {
 
     @RepeatedTest(10)
     fun `bamboo should match`() {
-        val nodes = generateBamboo(2_000_000)
+        val nodes = generateBamboo(1_000_000)
 
         shortestPathSequentialLong(nodes, 0)
         val sequentialResult = nodes.map { it.distance }
@@ -122,20 +120,20 @@ internal class NonBlockingLongDijkstraSchedulerTest {
     }
 
     @Timeout(100)
-    @RepeatedTest(40)
+    @RepeatedTest(100)
     fun `test on trees`() {
-        val nodes = 15
+        val nodes = 25
 
         testOnRandomGraphs(nodes, nodes - 1)
     }
 
-    @RepeatedTest(20)
+    @RepeatedTest(100)
     @Timeout(100)
     fun `test on very small graphs`() {
         testOnRandomGraphs(16, 25)
     }
 
-    @RepeatedTest(20)
+    @RepeatedTest(100)
     @Timeout(100)
     fun `test on small graphs`() {
         testOnRandomGraphs(100, 1000)
@@ -180,14 +178,17 @@ internal class NonBlockingLongDijkstraSchedulerTest {
         val seqRes = nodesList.map { it.distance }
         clearNodes(nodesList)
 
-        NonBlockingLongDijkstraScheduler(nodesList, from, 4, pSteal = 0.25).use { scheduler ->
-
+        val scheduler = NonBlockingLongDijkstraScheduler(nodesList, from, 4, pSteal = 0.25).use { scheduler ->
             scheduler.waitForTermination()
+            scheduler
         }
 
         val parRes = nodesList.map { it.distance }
         clearNodes(nodesList)
 
+        if (seqRes != parRes) {
+            println(1)
+        }
         kotlin.test.assertEquals(seqRes, parRes)
     }
 

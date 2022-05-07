@@ -13,7 +13,7 @@ open class StealingLongMultiQueueKS(
     threads: Int
 ) {
 
-    private val globalQueue = GlobalHeapWithStealingBufferLongQueue(stealSize)
+    val globalQueue = GlobalHeapWithStealingBufferLongQueue(stealSize)
 
     val queues = Array(threads) { HeapWithStealingBufferLongQueue(stealSize) }
 
@@ -62,8 +62,8 @@ open class StealingLongMultiQueueKS(
         return stealFromExactQueue(queueToSteal)
     }
 
-    fun stealAndDeleteFromSelf(): Long {
-        val queueToSteal = queues[currThread()]
+    fun stealAndDeleteFromSelf(index: Int): Long {
+        val queueToSteal = queues[index]
 
         return stealFromExactQueue(queueToSteal);
     }

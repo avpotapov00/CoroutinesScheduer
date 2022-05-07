@@ -1,8 +1,11 @@
 package org.jetbrains.kotlin.number.scheduler
 
+import kotlinx.atomicfu.AtomicInt
+import kotlinx.atomicfu.atomic
 import org.jetbrains.kotlin.generic.smq.IndexedThread
 import org.jetbrains.kotlin.graph.dijkstra.IntNode
 import org.jetbrains.kotlin.number.smq.StealingLongMultiQueueKS
+import org.jetbrains.kotlin.number.smq.heap.StealingLongQueue
 import org.jetbrains.kotlin.util.firstFromLong
 import org.jetbrains.kotlin.util.indexedBinarySearch
 import org.jetbrains.kotlin.util.secondFromLong
@@ -41,11 +44,9 @@ class NonBlockingLongDijkstraScheduler(
     init {
         insertGlobal(0.zip(startIndex))
 
-
         nodes[startIndex].distance = 0
         threads.forEach { it.start() }
     }
-
 
     fun waitForTermination() {
         finishPhaser.arriveAndAwaitAdvance()
@@ -54,35 +55,38 @@ class NonBlockingLongDijkstraScheduler(
     inner class Worker(override val index: Int) : IndexedThread() {
 
         private var locked = false
+        var stealingBuffer = LongArray(stealSize)
+        val random: ThreadLocalRandom = ThreadLocalRandom.current()
 
+        // Замеры для запланированных краж
         var totalTasksProcessed: Long = 0
-
         var successStealing: Int = 0
-
         var tasksLowerThanStolen: Int = 0
-
         var failedStealing: Int = 0
-
         var stealingAttempts: Int = 0
 
-        val random: ThreadLocalRandom = ThreadLocalRandom.current()
 
         override fun run() {
             var attempts = 0
             while (!terminated) {
 
                 // trying to get from local queue
+                if (locked) {
+                    finishPhaser.register()
+                }
                 var task = delete()
 
                 if (task != Long.MIN_VALUE) {
                     attempts = 0
                     if (locked) {
-                        finishPhaser.register()
                         locked = false
                     }
                     totalTasksProcessed++
                     tryUpdate(nodes[task.secondFromLong])
                     continue
+                }
+                if (locked) {
+                    finishPhaser.arriveAndDeregister()
                 }
 
                 if (attempts < retryCount) {
@@ -92,7 +96,6 @@ class NonBlockingLongDijkstraScheduler(
 
                 // if it didn't work, we try to remove it from the global queue
                 task = stealAndDeleteFromGlobal()
-
                 if (task != Long.MIN_VALUE) {
                     if (locked) {
                         finishPhaser.register()
@@ -103,8 +106,12 @@ class NonBlockingLongDijkstraScheduler(
                     continue
                 }
 
+                if (locked) {
+                    continue
+                }
+
                 // if it didn't work, we try to remove it from the self queue
-                task = stealAndDeleteFromSelf()
+                task = stealAndDeleteFromSelf(index)
 
                 if (task != Long.MIN_VALUE) {
                     if (locked) {
@@ -145,15 +152,53 @@ class NonBlockingLongDijkstraScheduler(
                 return task
             }
             // The local queue is empty , try to steal
-            return tryStealWithoutCheck()
+            return tryStealWithoutCheckNew(currThread)
         }
+
+        private fun tryStealWithoutCheckNew(currThread: Int): Long {
+            // Choose a random queue and check whether
+            // its top task has higher priority
+
+            val otherQueue = getNextQueueToSteal()
+            val ourTop = queues[currThread].getTopLocal()
+
+            val otherTop = otherQueue.top
+
+            if (ourTop == Long.MIN_VALUE || otherTop == Long.MIN_VALUE || otherTop.firstFromLong < ourTop.firstFromLong) {
+                // Try to steal a better task !
+                otherQueue.steal(stealingBuffer)
+                if (stealingBuffer[0] == Long.MIN_VALUE) {
+                    return Long.MIN_VALUE
+                } // failed
+                // Return the first task and add the others
+                // to the thread - local buffer of stolen ones
+                val stolenTasksDeque = stolenTasks.get()
+
+                var size = 1
+                for (i in 1 until stealSize) {
+                    val stolenValue = stealingBuffer[i]
+                    if (stolenValue != Long.MIN_VALUE) {
+                        size++
+                        stolenTasksDeque.add(stolenValue)
+                    } else {
+                        break
+                    }
+                }
+
+                return stealingBuffer[0]
+            }
+
+            return Long.MIN_VALUE
+        }
+
 
         private fun trySteal(currThread: Int): Long {
             // Choose a random queue and check whether
             // its top task has higher priority
 
-            val otherQueue = getQueueToSteal()
-            val ourTop = queues[currThread].top
+            val otherQueue = getNextQueueToSteal()
+            val ourTop = queues[currThread].getTopLocal()
+
             val otherTop = otherQueue.top
             if (ourTop != Long.MIN_VALUE) {
                 stealingAttempts++
@@ -161,27 +206,43 @@ class NonBlockingLongDijkstraScheduler(
 
             if (ourTop == Long.MIN_VALUE || otherTop == Long.MIN_VALUE || otherTop.firstFromLong < ourTop.firstFromLong) {
                 // Try to steal a better task !
-                val stolen = otherQueue.steal()
-                if (stolen.isEmpty()) {
-                    failedStealing++
+                otherQueue.steal(stealingBuffer)
+                if (stealingBuffer[0] == Long.MIN_VALUE) {
+                    if (ourTop != Long.MIN_VALUE) {
+                        failedStealing++
+                    }
                     return Long.MIN_VALUE
                 } // failed
-                if (ourTop != Long.MIN_VALUE) {
-                    successStealing++
-
-                    tasksLowerThanStolen += indexedBinarySearch(stolen, ourTop)
-                }
                 // Return the first task and add the others
                 // to the thread - local buffer of stolen ones
                 val stolenTasksDeque = stolenTasks.get()
 
-                for (i in 1 until stolen.size) {
-                    stolenTasksDeque.add(stolen[i])
+                var size = 1
+                for (i in 1 until stealSize) {
+                    val stolenValue = stealingBuffer[i]
+                    if (stolenValue != Long.MIN_VALUE) {
+                        size++
+                        stolenTasksDeque.add(stolenValue)
+                    } else {
+                        break
+                    }
                 }
-                return stolen[0]
+
+                if (ourTop != Long.MIN_VALUE) {
+                    successStealing++
+                    val increment = indexedBinarySearch(stealingBuffer, ourTop, size)
+                    tasksLowerThanStolen += increment
+                }
+                return stealingBuffer[0]
             }
 
             return Long.MIN_VALUE
+        }
+
+        private fun getNextQueueToSteal(): StealingLongQueue {
+            val index = random.nextInt(0, queues.size + 1)
+
+            return if (index == queues.size) globalQueue else queues[index]
         }
 
         private fun tryUpdate(cur: IntNode) {

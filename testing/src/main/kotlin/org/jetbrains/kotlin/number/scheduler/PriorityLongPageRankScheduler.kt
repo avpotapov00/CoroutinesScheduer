@@ -16,10 +16,7 @@ import java.util.concurrent.Phaser
 import java.util.concurrent.ThreadLocalRandom
 import java.util.concurrent.locks.LockSupport
 
-/**
- * @author Потапов Александр
- * @since 14.04.2022
- */
+
 class PriorityLongPageRankScheduler(
     private val nodes: List<FloatNode>,
     val tolerance: Float = 1.0e-3f,
@@ -56,9 +53,11 @@ class PriorityLongPageRankScheduler(
     val finishPhaser = Phaser(poolSize + 1)
 
     init {
+        val initPriority = toPriority(initResidual)
+
         nodes.forEachIndexed { index, node ->
             node.residual = initResidual
-            insertGlobal(1.zip(index))
+            insertGlobal(initPriority.zip(index))
         }
 
         threads.forEach { it.start() }
@@ -71,16 +70,38 @@ class PriorityLongPageRankScheduler(
     inner class Worker(override val index: Int) : IndexedThread() {
 
         var totalTasksProcessed: Long = 0
-
         var successStealing: Int = 0
-
         var tasksLowerThanStolen: Int = 0
-
         var failedStealing: Int = 0
-
         var stealingAttempts: Int = 0
 
         val random: ThreadLocalRandom = ThreadLocalRandom.current()
+
+        val stealingBuffer: MutableList<Long> = ArrayList(STEAL_SIZE_UPPER_BOUND)
+
+        // количество раз когда что-то украли
+        var stealingTotal = 0
+
+        // суммарное количество украденного
+        var stolenCountSum = 0
+
+        // количество раз, когда буффер был заполнен полностью
+        var fullBufferTimesSum = 0
+
+        // количество задач лучше нашего топа, включая те случаи, когда у нас ничего нет
+        var tasksLowerThanStolenIncludingOurEmptiness = 0
+
+        // Section 3
+        var tasksFromBufferBetterThanTop = 0
+        var tasksFromBufferBetterOrEqualThanTop = 0
+        var tasksFromBufferBetterOrEqualThanSecondTop = 0
+        var tasksFromBufferBetterThanSecondTop = 0
+
+        var tasksFromBufferBetterThanTopWithoutEmpty = 0
+        var tasksFromBufferBetterOrEqualThanTopWithoutEmpty = 0
+        var tasksFromBufferBetterOrEqualThanSecondTopWithoutEmpty = 0
+        var tasksFromBufferBetterThanSecondTopWithoutEmpty = 0
+
 
         override fun run() {
             var attempts = 0
@@ -111,7 +132,7 @@ class PriorityLongPageRankScheduler(
                 }
 
                 // if it didn't work, we try to remove it from the self queue
-                task = stealAndDeleteFromSelf()
+                task = stealAndDeleteFromSelf(index)
 
                 if (task != Long.MIN_VALUE) {
                     attempts = 0
@@ -126,11 +147,49 @@ class PriorityLongPageRankScheduler(
         }
 
         private fun delete(): Long {
-            // Do we have previously stolen tasks ?
-            if (stolenTasks.get().isNotEmpty()) {
-                return stolenTasks.get().removeFirst()
-            }
             val currThread = index
+
+            // Do we have previously stolen tasks ?
+            val ourDeque = stolenTasks.get()
+            if (ourDeque.isNotEmpty()) {
+                val task = ourDeque.removeFirst()
+                val localTop = queues[currThread].getTopLocal()
+
+                if (localTop == Long.MIN_VALUE) {
+                    tasksFromBufferBetterThanTop++
+                    tasksFromBufferBetterOrEqualThanTop++
+                    tasksFromBufferBetterThanSecondTop++
+                    tasksFromBufferBetterOrEqualThanSecondTop++
+                } else {
+                    val topFirstFromLong = localTop.firstFromLong
+                    val taskFirstFromLong = task.firstFromLong
+                    if (taskFirstFromLong <= topFirstFromLong) {
+                        if (taskFirstFromLong < topFirstFromLong) {
+                            tasksFromBufferBetterThanTop++
+                            tasksFromBufferBetterThanTopWithoutEmpty++
+                        }
+                        tasksFromBufferBetterOrEqualThanTop++
+                        tasksFromBufferBetterOrEqualThanTopWithoutEmpty++
+                    }
+
+                    val secondLocalTop = queues[currThread].getSecondTopLocal()
+                    if (secondLocalTop == Long.MIN_VALUE) {
+                        tasksFromBufferBetterThanSecondTop++
+                        tasksFromBufferBetterOrEqualThanSecondTop++
+                    } else {
+                        val secondTopFirstFromLong = secondLocalTop.firstFromLong
+                        if (taskFirstFromLong <= secondTopFirstFromLong) {
+                            if (taskFirstFromLong < secondTopFirstFromLong) {
+                                tasksFromBufferBetterThanSecondTop++
+                                tasksFromBufferBetterThanSecondTopWithoutEmpty++
+                            }
+                            tasksFromBufferBetterOrEqualThanSecondTop++
+                            tasksFromBufferBetterOrEqualThanSecondTopWithoutEmpty++
+                        }
+                    }
+                }
+                return task
+            }
 
             // Should we steal ?
             if (shouldSteal()) {
@@ -146,7 +205,49 @@ class PriorityLongPageRankScheduler(
                 return task
             }
             // The local queue is empty , try to steal
-            return tryStealWithoutCheck()
+            return trySteal(currThread)
+        }
+
+        private fun trySteal2(currThread: Int): Long {
+            // Choose a random queue and check whether
+            // its top task has higher priority
+
+            val otherQueue = getQueueToSteal()
+            val ourTop = queues[currThread].getTopLocal()
+            val otherTop = otherQueue.top
+
+            if (otherTop == Long.MIN_VALUE) return Long.MIN_VALUE
+            if (ourTop == Long.MIN_VALUE || otherTop.firstFromLong < ourTop.firstFromLong) {
+                // Try to steal a better task !
+                otherQueue.steal(stealingBuffer)
+                stealingTotal++
+                stolenCountSum += stealingBuffer.size
+                if (stealingBuffer.size == stealSize) {
+                    fullBufferTimesSum++
+                }
+
+                if (stealingBuffer.isEmpty()) {
+                    return Long.MIN_VALUE
+                } // failed
+
+                if (ourTop != Long.MIN_VALUE) {
+                    val tasksBetter = indexedBinarySearch(stealingBuffer, ourTop)
+
+                    tasksLowerThanStolenIncludingOurEmptiness += tasksBetter
+                } else {
+                    tasksLowerThanStolenIncludingOurEmptiness += stealingBuffer.size
+                }
+                // Return the first task and add the others
+                // to the thread - local buffer of stolen ones
+                val stolenTasksDeque = stolenTasks.get()
+
+                for (i in 1 until stealingBuffer.size) {
+                    stolenTasksDeque.add(stealingBuffer[i])
+                }
+                return stealingBuffer[0]
+            }
+
+            return Long.MIN_VALUE
         }
 
         private fun trySteal(currThread: Int): Long {
@@ -154,36 +255,50 @@ class PriorityLongPageRankScheduler(
             // its top task has higher priority
 
             val otherQueue = getQueueToSteal()
-            val ourTop = queues[currThread].top
+            val ourTop = queues[currThread].getTopLocal()
             val otherTop = otherQueue.top
             if (ourTop != Long.MIN_VALUE) {
                 stealingAttempts++
             }
 
-            if (ourTop == Long.MIN_VALUE || otherTop == Long.MIN_VALUE || otherTop.firstFromLong < ourTop.firstFromLong) {
+            if (otherTop == Long.MIN_VALUE) return Long.MIN_VALUE
+            if (ourTop == Long.MIN_VALUE || otherTop.firstFromLong < ourTop.firstFromLong) {
                 // Try to steal a better task !
-                val stolen = otherQueue.steal()
-                if (stolen.isEmpty()) {
+                otherQueue.steal(stealingBuffer)
+                stealingTotal++
+                stolenCountSum += stealingBuffer.size
+                if (stealingBuffer.size == stealSize) {
+                    fullBufferTimesSum++
+                }
+
+                if (stealingBuffer.isEmpty()) {
                     failedStealing++
                     return Long.MIN_VALUE
                 } // failed
+
                 if (ourTop != Long.MIN_VALUE) {
                     successStealing++
 
-                    tasksLowerThanStolen += indexedBinarySearch(stolen, ourTop)
+                    val tasksBetter = indexedBinarySearch(stealingBuffer, ourTop)
+
+                    tasksLowerThanStolen += tasksBetter
+                    tasksLowerThanStolenIncludingOurEmptiness += tasksBetter
+                } else {
+                    tasksLowerThanStolenIncludingOurEmptiness += stealingBuffer.size
                 }
                 // Return the first task and add the others
                 // to the thread - local buffer of stolen ones
                 val stolenTasksDeque = stolenTasks.get()
 
-                for (i in 1 until stolen.size) {
-                    stolenTasksDeque.add(stolen[i])
+                for (i in 1 until stealingBuffer.size) {
+                    stolenTasksDeque.add(stealingBuffer[i])
                 }
-                return stolen[0]
+                return stealingBuffer[0]
             }
 
             return Long.MIN_VALUE
         }
+
 
         private fun goWait() {
             var oldThread: Worker?
@@ -239,34 +354,37 @@ class PriorityLongPageRankScheduler(
             }
 
             val oldResidual = cur.exchange(0.0f)
+
             val srcNout = cur.nodesCount
-            var updateWas = false
 
             if (srcNout > 0) {
                 val delta = oldResidual * alpha / srcNout
+
+                if (delta <= 0) return
 
                 for (edge in cur.outgoingEdges) {
                     val dst = nodes[edge.to]
                     val old = dst.atomicAdd(delta)
 
-                    if ((old < tolerance) || (old + delta >= tolerance)) {
-                        insert(1.zip(edge.to))
-                        updateWas = true
+                    val newResidual = old + delta
+
+                    if ((old < tolerance) || (newResidual >= tolerance)) {
+
+                        val priority = toPriority(newResidual)
+                        insert(priority.zip(edge.to))
                     }
                 }
-            }
-
-            if (updateWas) {
-                checkWakeThread()
             }
         }
 
         fun insert(task: Long) {
             queues[index].addLocal(task)
         }
-
     }
 
+    private fun toPriority(residual: Float): Int {
+        return residualToPriorityFactor - (residual * residualToPriorityFactor).toInt()
+    }
 
     override fun close() {
         terminated = true
@@ -294,6 +412,59 @@ class PriorityLongPageRankScheduler(
         return threads.sumOf { it.tasksLowerThanStolen.toLong() }
     }
 
+    fun stealingTotal(): Long {
+        return threads.sumOf { it.stealingTotal.toLong() }
+    }
+
+    fun stolenCountSum(): Long {
+        return threads.sumOf { it.stolenCountSum.toLong() }
+    }
+
+    fun fullBufferTimesSum(): Long {
+        return threads.sumOf { it.fullBufferTimesSum.toLong() }
+    }
+
+    fun tasksLowerThanStolenIncludingOurEmptiness(): Long {
+        return threads.sumOf { it.tasksLowerThanStolenIncludingOurEmptiness.toLong() }
+    }
+
+    fun tasksFromBufferBetterThanTop(): Long {
+        return threads.sumOf { it.tasksFromBufferBetterThanTop.toLong() }
+    }
+
+    fun tasksFromBufferBetterOrEqualThanTop(): Long {
+        return threads.sumOf { it.tasksFromBufferBetterOrEqualThanTop.toLong() }
+    }
+
+    fun tasksFromBufferBetterThanTopWithoutEmpty(): Long {
+        return threads.sumOf { it.tasksFromBufferBetterThanTopWithoutEmpty.toLong() }
+    }
+
+    fun tasksFromBufferBetterOrEqualThanTopWithoutEmpty(): Long {
+        return threads.sumOf { it.tasksFromBufferBetterOrEqualThanTopWithoutEmpty.toLong() }
+    }
+
+    fun tasksFromBufferBetterThanSecondTop(): Long {
+        return threads.sumOf { it.tasksFromBufferBetterThanSecondTop.toLong() }
+    }
+
+    fun tasksFromBufferBetterOrEqualThanSecondTop(): Long {
+        return threads.sumOf { it.tasksFromBufferBetterOrEqualThanSecondTop.toLong() }
+    }
+
+    fun tasksFromBufferBetterThanSecondTopWithoutEmpty(): Long {
+        return threads.sumOf { it.tasksFromBufferBetterThanSecondTopWithoutEmpty.toLong() }
+    }
+
+    fun tasksFromBufferBetterOrEqualThanSecondTopWithoutEmpty(): Long {
+        return threads.sumOf { it.tasksFromBufferBetterOrEqualThanSecondTopWithoutEmpty.toLong() }
+    }
+
+    fun filledTimes(): Long {
+        return queues.sumOf { it.filledTimes.toLong() }
+    }
+
+
 }
 
 // The threshold of tasks in the thread queue after which other threads must be woken up
@@ -301,3 +472,5 @@ private const val TASKS_COUNT_WAKE_THRESHOLD = 30
 
 // The number of cells that we will look at trying to wake up the thread
 private const val WAKE_RETRY_COUNT = 5
+
+private const val residualToPriorityFactor = 100_000

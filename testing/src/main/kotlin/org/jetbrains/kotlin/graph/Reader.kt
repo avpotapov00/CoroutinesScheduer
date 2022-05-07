@@ -48,6 +48,12 @@ class GraphReader {
             }
     }
 
+    fun readGraphNodesBiDirectFromFileBfs(fileName: String): List<BfsIntNode> {
+        File(fileName).bufferedReader().use { reader ->
+            return readNodesBFS(reader)
+        }
+    }
+
     fun readGraphNodesBiDirectFromFile(fileName: String): List<IntNode> {
         File(fileName).bufferedReader().use { reader ->
                 return readNodes(reader)

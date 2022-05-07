@@ -52,6 +52,19 @@ internal class NumberUtilsKtTest {
         assertEquals(0, result)
     }
 
+    @Test
+    fun `triple to long test`() {
+        val first = 283_791
+        val second = 8392
+        val third = 38922
+
+        val triple = tripleToLong(first, second, third)
+
+        assertEquals(first, triple.firstFromTriple())
+        assertEquals(second, triple.secondFromTriple())
+        assertEquals(third, triple.thirdFromTriple())
+    }
+
     private fun wrapIts(vararg values: Int): List<Long> = values.map { it.zip(0) }
 
 }

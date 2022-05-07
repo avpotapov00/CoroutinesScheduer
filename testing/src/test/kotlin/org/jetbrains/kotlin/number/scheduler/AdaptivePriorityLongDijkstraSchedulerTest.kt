@@ -62,7 +62,7 @@ class AdaptivePriorityLongDijkstraSchedulerTest{
         }
 
         val dijkstraScheduler =
-            AdaptivePriorityLongDijkstraScheduler(nodesList, 0, 1, stealSize = 1, pSteal = 1.0, retryCount = 3)
+            OldAdaptiveNonBlockingDijkstraScheduler(nodesList, 0, 1, stealSize = 1, pSteal = 1.0, retryCount = 3)
         dijkstraScheduler.waitForTermination()
 
         println(nodesList.map { it.distance })
@@ -81,7 +81,7 @@ class AdaptivePriorityLongDijkstraSchedulerTest{
         b.addEdge(2, 1)
         a.addEdge(2, 4)
 
-        val dijkstraScheduler = AdaptivePriorityLongDijkstraScheduler(nodesList, 0, 4)
+        val dijkstraScheduler = OldAdaptiveNonBlockingDijkstraScheduler(nodesList, 0, 4)
 
         dijkstraScheduler.waitForTermination()
 
@@ -100,7 +100,7 @@ class AdaptivePriorityLongDijkstraSchedulerTest{
 
         clearNodes(nodes)
 
-        val dijkstraScheduler = AdaptivePriorityLongDijkstraScheduler(nodes, 0, 4)
+        val dijkstraScheduler = OldAdaptiveNonBlockingDijkstraScheduler(nodes, 0, 4)
         dijkstraScheduler.waitForTermination()
 
         val parallelResult = nodes.map { it.distance }
@@ -117,7 +117,7 @@ class AdaptivePriorityLongDijkstraSchedulerTest{
 
         clearNodes(nodes)
 
-        AdaptivePriorityLongDijkstraScheduler(nodes, 0, 8, pSteal = 0.0625, stealSize = 8).use {
+        OldAdaptiveNonBlockingDijkstraScheduler(nodes, 0, 8, pSteal = 0.0625, stealSize = 8).use {
             it.waitForTermination()
         }
 
@@ -185,7 +185,7 @@ class AdaptivePriorityLongDijkstraSchedulerTest{
         val seqRes = nodesList.map { it.distance }
         clearNodes(nodesList)
 
-        AdaptivePriorityLongDijkstraScheduler(nodesList, from, 4, pSteal = 0.25).use { scheduler ->
+        OldAdaptiveNonBlockingDijkstraScheduler(nodesList, from, 4, pSteal = 0.25).use { scheduler ->
 
             scheduler.waitForTermination()
 

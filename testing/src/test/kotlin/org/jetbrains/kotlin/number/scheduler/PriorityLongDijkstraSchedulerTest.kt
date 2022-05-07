@@ -10,7 +10,6 @@ import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.RepeatedTest
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import java.io.File
 import kotlin.random.Random
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -59,9 +58,9 @@ internal class PriorityLongDijkstraSchedulerTest {
             b.value.addEdge(a.index, 1)
         }
 
-        val dijkstraScheduler =
-            PriorityLongDijkstraScheduler(nodesList, 0, 1, stealSize = 1, pSteal = 1.0, retryCount = 3)
-        dijkstraScheduler.waitForTermination()
+        PriorityLongDijkstraSchedulerKS(nodesList, 0, 1, stealSize = 1, pSteal = 1.0, retryCount = 3).use {
+            it.waitForTermination()
+        }
 
         println(nodesList.map { it.distance })
 
@@ -79,7 +78,7 @@ internal class PriorityLongDijkstraSchedulerTest {
         b.addEdge(2, 1)
         a.addEdge(2, 4)
 
-        val dijkstraScheduler = PriorityLongDijkstraScheduler(nodesList, 0, 4)
+        val dijkstraScheduler = PriorityLongDijkstraSchedulerKS(nodesList, 0, 4)
 
         dijkstraScheduler.waitForTermination()
 
@@ -88,7 +87,6 @@ internal class PriorityLongDijkstraSchedulerTest {
         Assertions.assertEquals(3, c.distance)
     }
 
-    @Test
     @RepeatedTest(30)
     fun `random graph should match`() {
         val nodes = randomConnectedIntGraph(16, 25)
@@ -108,14 +106,14 @@ internal class PriorityLongDijkstraSchedulerTest {
 
     @RepeatedTest(10)
     fun `bamboo should match`() {
-        val nodes = generateBamboo(3_000_000)
+        val nodes = generateBamboo(1_000_000)
 
         shortestPathSequentialLong(nodes, 0)
         val sequentialResult = nodes.map { it.distance }
 
         clearNodes(nodes)
 
-        PriorityLongDijkstraScheduler(nodes, 0, 8, pSteal = 0.0625, stealSize = 8).use {
+        PriorityLongDijkstraSchedulerKS(nodes, 0, 8, pSteal = 0.0625, stealSize = 8).use {
             it.waitForTermination()
         }
 
@@ -125,20 +123,20 @@ internal class PriorityLongDijkstraSchedulerTest {
     }
 
     @Timeout(100)
-    @RepeatedTest(40)
+    @RepeatedTest(100)
     fun `test on trees`() {
         val nodes = 15
 
         testOnRandomGraphs(nodes, nodes - 1)
     }
 
-    @RepeatedTest(20)
+    @RepeatedTest(40)
     @Timeout(100)
     fun `test on very small graphs`() {
         testOnRandomGraphs(16, 25)
     }
 
-    @RepeatedTest(20)
+    @RepeatedTest(40)
     @Timeout(100)
     fun `test on small graphs`() {
         testOnRandomGraphs(100, 1000)
@@ -183,7 +181,7 @@ internal class PriorityLongDijkstraSchedulerTest {
         val seqRes = nodesList.map { it.distance }
         clearNodes(nodesList)
 
-        PriorityLongDijkstraScheduler(nodesList, from, 4, pSteal = 0.25).use { scheduler ->
+        PriorityLongDijkstraSchedulerKS(nodesList, from, 4, pSteal = 0.25).use { scheduler ->
 
             scheduler.waitForTermination()
 

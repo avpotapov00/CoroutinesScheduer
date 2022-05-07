@@ -105,7 +105,7 @@ class NonBlockingPriorityLongPageRankScheduler(
                 }
 
                 // if it didn't work, we try to remove it from the self queue
-                task = stealAndDeleteFromSelf()
+                task = stealAndDeleteFromSelf(index)
 
                 if (task != Long.MIN_VALUE) {
                     if (locked) {
@@ -222,9 +222,8 @@ class NonBlockingPriorityLongPageRankScheduler(
     }
 
     fun toPriority(residual: Float): Int {
-        return (residual * residualToPriorityFactor).toInt()
+        return residualToPriorityFactor - (residual * residualToPriorityFactor).toInt()
     }
-
 
     override fun close() {
         terminated = true

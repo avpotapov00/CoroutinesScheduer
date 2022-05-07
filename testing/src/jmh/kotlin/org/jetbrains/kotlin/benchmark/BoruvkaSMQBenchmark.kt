@@ -2,8 +2,8 @@
 //
 //import org.jetbrains.kotlin.graph.GraphReader
 //import org.jetbrains.kotlin.graph.boruvka.intNodesToEdges
-//import org.jetbrains.kotlin.graph.util.edges.Edge
-//import org.jetbrains.kotlin.number.scheduler.parallelBoruvkaExp
+//import org.jetbrains.kotlin.graph.util.edges.EdgeIndexed
+//import org.jetbrains.kotlin.number.scheduler.NonBlockingPriorityLongBoruvkaScheduler
 //import org.openjdk.jmh.annotations.*
 //import java.util.concurrent.TimeUnit
 //
@@ -18,48 +18,50 @@
 //
 //    @Benchmark
 //    fun testSequence(config: Config) {
-//        val result = parallelBoruvkaExp(
+//        val scheduler = NonBlockingPriorityLongBoruvkaScheduler(
 //            config.edges,
 //            config.nodes,
 //            poolSize = config.threads,
 //            stealSize = config.stealSize,
 //            pSteal = config.pSteal
-//        )
-//        val scheduler = result.first
+//        ).use {
+//            it.parallelBoruvkaExp()
+//            it.waitForTermination()
+//            it
+//        }
 //
-////        addResultBoruvka(
-////            BenchmarkResultWithMetrics(
-////                "dijkstra", config.sourcePath, config.pSteal, config.stealSize,
-////                stealingAttempts = scheduler.stealingAttempts(),
-////                failedStealing = scheduler.failedStealing(),
-////                totalTasksProcessed = scheduler.totalTasksProcessed(),
-////                successStealing = scheduler.successStealing(),
-////                tasksBetterThanTop = scheduler.tasksLowerThanStolen()
-////            )
-////        )
+//        addResultBoruvka(
+//            BenchmarkResultWithMetrics(
+//                "boruvka", config.sourcePath, config.pSteal, config.stealSize,
+//                stealingAttempts = scheduler.stealingAttempts(),
+//                failedStealing = scheduler.failedStealing(),
+//                totalTasksProcessed = scheduler.totalTasksProcessed(),
+//                successStealing = scheduler.successStealing(),
+//                tasksBetterThanTop = scheduler.tasksLowerThanStolen()
+//            )
+//        )
 //    }
 //
 //    @State(Scope.Thread)
 //    open class Config {
 //
 //        //        @Param("1", "2", "4", "8", "16", "32", "64", "128", "256")
-//        var threads: Int = 128
+//        var threads: Int = 76
 //
-//        @Param("1", "0.5", "0.25", "0.125", "0.0625", "0.03125", "0.015625", "0.0078125", "0.001953125")
+//        @Param("1", "0.5", "0.25", "0.125", "0.0625", "0.03125", "0.015625", "0.0078125", "0.001953125", "0.0009765625")
 //        var pSteal: Double = 0.03125
 //
-//        @Param("1", "2", "4", "8", "16", "32", "64", "128", "256")
+//        @Param("1", "2", "4", "8", "16", "32", "64", "128", "256", "512", "1024")
 //        var stealSize: Int = 8
 //
 //        @Param(
 //            "/USA-road-d.W.gr",
-////            "/USA-road-d.USA.gr"
 //        )
 //        lateinit var sourcePath: String
 //
 //        var nodes: Int = 0
 //
-//        lateinit var edges: List<Edge>
+//        lateinit var edges: List<EdgeIndexed>
 //
 //        @Setup(Level.Trial)
 //        fun setup() {

@@ -1,9 +1,6 @@
 package org.jetbrains.kotlin.number.scheduler
 
-import kotlinx.atomicfu.AtomicInt
-import kotlinx.atomicfu.atomic
 import org.jetbrains.kotlin.generic.smq.IndexedThread
-import org.jetbrains.kotlin.graph.dijkstra.BfsIntNode
 import org.jetbrains.kotlin.graph.dijkstra.IntNode
 import org.jetbrains.kotlin.number.smq.StealingLongMultiQueueKS
 import org.jetbrains.kotlin.util.firstFromLong
@@ -14,17 +11,19 @@ import java.io.Closeable
 import java.util.concurrent.Phaser
 import java.util.concurrent.ThreadLocalRandom
 
-class NonBlockingLongBfsScheduler(
-    private val nodes: List<BfsIntNode>,
+class OldAdaptiveNonBlockingDijkstraScheduler(
+    private val nodes: List<IntNode>,
     startIndex: Int,
     val poolSize: Int,
     val stealSize: Int = 3,
     pSteal: Double = 0.04,
     // The number of attempts to take a task from one thread
-    private val retryCount: Int = 100
+    private val retryCount: Int = 100,
+    private val deltaStealSize: Double = 0.8,
+    checkAttemptsCountInitial: Int = 100
 ) : StealingLongMultiQueueKS(stealSize, pSteal, poolSize), Closeable {
 
-    private val starter: AtomicInt
+    val checkAttemptsCount = (checkAttemptsCountInitial / pSteal).toInt()
 
     /**
      * End of work flag
@@ -39,19 +38,32 @@ class NonBlockingLongBfsScheduler(
 
     val finishPhaser = Phaser(poolSize + 1)
 
+    var stealSizeGlobal: Int = stealSize
+
     init {
-        starter = atomic(0)
         insertGlobal(0.zip(startIndex))
+        stealSizeGlobal = stealSize
         nodes[startIndex].distance = 0
+    }
+
+    fun start() {
         threads.forEach { it.start() }
     }
 
 
     fun waitForTermination() {
-        starter.incrementAndGet()
         finishPhaser.arriveAndAwaitAdvance()
     }
 
+    enum class StealSizeDirection {
+        DECREASE,
+        INCREASE
+    }
+
+    enum class Phase {
+        SKIP,
+        COLLECT
+    }
 
     inner class Worker(override val index: Int) : IndexedThread() {
 
@@ -69,33 +81,42 @@ class NonBlockingLongBfsScheduler(
 
         val random: ThreadLocalRandom = ThreadLocalRandom.current()
 
-        var stealingBuffer = LongArray(stealSize)
+        var previousMetric: Double = 1.0
+
+        var lastMetrics: Double = 1.0
+
+        var stealSizeLocal = stealSize
+
+        var direction: StealSizeDirection = StealSizeDirection.INCREASE
+
+        var firstTime = true
+
+        var updates: Int = 0
+
+        var phase = Phase.COLLECT
+
+
+        init {
+            require(stealSizeLocal > 0) { "Error! 0 steal size" }
+        }
 
         override fun run() {
-            starter.incrementAndGet()
-            while (starter.value != poolSize + 1) {
-            }
-
             var attempts = 0
             while (!terminated) {
+                tryUpdateStealSize()
 
                 // trying to get from local queue
-                if (locked) {
-                    finishPhaser.register()
-                }
                 var task = delete()
 
                 if (task != Long.MIN_VALUE) {
                     attempts = 0
                     if (locked) {
+                        finishPhaser.register()
                         locked = false
                     }
                     totalTasksProcessed++
                     tryUpdate(nodes[task.secondFromLong])
                     continue
-                }
-                if (locked) {
-                    finishPhaser.arriveAndDeregister()
                 }
 
                 if (attempts < retryCount) {
@@ -105,6 +126,7 @@ class NonBlockingLongBfsScheduler(
 
                 // if it didn't work, we try to remove it from the global queue
                 task = stealAndDeleteFromGlobal()
+
                 if (task != Long.MIN_VALUE) {
                     if (locked) {
                         finishPhaser.register()
@@ -112,10 +134,6 @@ class NonBlockingLongBfsScheduler(
                     }
                     attempts = 0
                     tryUpdate(nodes[task.secondFromLong])
-                    continue
-                }
-
-                if (locked) {
                     continue
                 }
 
@@ -140,6 +158,85 @@ class NonBlockingLongBfsScheduler(
             }
         }
 
+        private fun tryUpdateStealSize() {
+            if (index == 0) { // controller thread
+                if (successStealing > checkAttemptsCount) {
+                    println("Check!")
+                    if (phase == Phase.SKIP) {
+                        println("Skip!")
+                        successStealing = 0
+                        tasksLowerThanStolen = 0
+                        phase = Phase.COLLECT
+                        return
+                    }
+
+                    val metrics = tasksLowerThanStolen.toDouble() / (stealSizeLocal * successStealing)
+
+                    if (firstTime) {
+                        firstTime = false
+                        previousMetric = metrics
+                        tasksLowerThanStolen = 0
+                        successStealing = 0
+                        return
+                    }
+
+                    when (direction) {
+                        StealSizeDirection.INCREASE -> {
+                            if (metrics > 0.5 && previousMetric - metrics < deltaStealSize && stealSizeLocal != STEAL_SIZE_UPPER_BOUND) {
+                                setNewGlobalStealSize(stealSizeLocal * 2)
+                            } else if (stealSizeLocal != STEAL_SIZE_LOWER_BOUND){
+                                setNewGlobalStealSize(stealSizeLocal / 2)
+                                direction = StealSizeDirection.DECREASE
+                            }
+                        }
+                        StealSizeDirection.DECREASE -> {
+                            if (metrics - previousMetric > deltaStealSize && stealSizeLocal != STEAL_SIZE_LOWER_BOUND) {
+                                setNewGlobalStealSize(stealSizeLocal / 2)
+                            } else if (stealSizeLocal != STEAL_SIZE_UPPER_BOUND) {
+                                setNewGlobalStealSize(stealSizeLocal * 2)
+                                direction = StealSizeDirection.INCREASE
+                            }
+                        }
+                    }
+                    lastMetrics = previousMetric
+                    previousMetric = metrics
+
+                    tasksLowerThanStolen = 0
+                    successStealing = 0
+                }
+            } else { // other threads
+                if (successStealing > checkAttemptsCount) {
+                    successStealing = 0
+                    tasksLowerThanStolen = 0
+
+                    if (phase == Phase.SKIP) {
+                        phase = Phase.COLLECT
+                        return
+                    }
+
+                    val currentValueGlobal = stealSizeGlobal
+                    if (currentValueGlobal == 0) {
+                        println("ERROR!!!".repeat(10))
+                        error("Error! reading 0")
+                    }
+                    if (currentValueGlobal != stealSizeLocal) {
+                        stealSizeLocal = currentValueGlobal
+                        queues[index].setNextStealSize(stealSizeLocal)
+                        phase = Phase.SKIP
+                    }
+                }
+            }
+        }
+
+        private fun setNewGlobalStealSize(nextValue: Int) {
+            updates++
+            check(nextValue > 0) { "Error! writing 0" }
+            stealSizeGlobal = nextValue
+            stealSizeLocal = nextValue
+            queues[index].setNextStealSize(nextValue)
+            phase = Phase.SKIP
+        }
+
         private fun delete(): Long {
             // Do we have previously stolen tasks ?
             if (stolenTasks.get().isNotEmpty()) {
@@ -161,53 +258,15 @@ class NonBlockingLongBfsScheduler(
                 return task
             }
             // The local queue is empty , try to steal
-            return tryStealWithoutCheckNew(currThread)
+            return tryStealWithoutCheck()
         }
-
-        private fun tryStealWithoutCheckNew(currThread: Int): Long {
-            // Choose a random queue and check whether
-            // its top task has higher priority
-
-            val otherQueue = getQueueToSteal()
-            val ourTop = queues[currThread].getTopLocal()
-
-            val otherTop = otherQueue.top
-
-            if (ourTop == Long.MIN_VALUE || otherTop == Long.MIN_VALUE || otherTop.firstFromLong < ourTop.firstFromLong) {
-                // Try to steal a better task !
-                otherQueue.steal(stealingBuffer)
-                if (stealingBuffer[0] == Long.MIN_VALUE) {
-                    return Long.MIN_VALUE
-                } // failed
-                // Return the first task and add the others
-                // to the thread - local buffer of stolen ones
-                val stolenTasksDeque = stolenTasks.get()
-
-                var size = 1
-                for (i in 1 until stealSize) {
-                    val stolenValue = stealingBuffer[i]
-                    if (stolenValue != Long.MIN_VALUE) {
-                        size++
-                        stolenTasksDeque.add(stolenValue)
-                    } else {
-                        break
-                    }
-                }
-
-                return stealingBuffer[0]
-            }
-
-            return Long.MIN_VALUE
-        }
-
 
         private fun trySteal(currThread: Int): Long {
             // Choose a random queue and check whether
             // its top task has higher priority
 
             val otherQueue = getQueueToSteal()
-            val ourTop = queues[currThread].getTopLocal()
-
+            val ourTop = queues[currThread].top
             val otherTop = otherQueue.top
             if (ourTop != Long.MIN_VALUE) {
                 stealingAttempts++
@@ -215,50 +274,41 @@ class NonBlockingLongBfsScheduler(
 
             if (ourTop == Long.MIN_VALUE || otherTop == Long.MIN_VALUE || otherTop.firstFromLong < ourTop.firstFromLong) {
                 // Try to steal a better task !
-                otherQueue.steal(stealingBuffer)
-                if (stealingBuffer[0] == Long.MIN_VALUE) {
-                    if (ourTop != Long.MIN_VALUE) {
-                        failedStealing++
-                    }
+                val stolen = otherQueue.steal()
+                if (stolen.isEmpty()) {
+                    failedStealing++
                     return Long.MIN_VALUE
                 } // failed
+                if (ourTop != Long.MIN_VALUE) {
+                    successStealing++
+
+                    tasksLowerThanStolen += indexedBinarySearch(stolen, ourTop)
+                }
                 // Return the first task and add the others
                 // to the thread - local buffer of stolen ones
                 val stolenTasksDeque = stolenTasks.get()
 
-                var size = 1
-                for (i in 1 until stealSize) {
-                    val stolenValue = stealingBuffer[i]
-                    if (stolenValue != Long.MIN_VALUE) {
-                        size++
-                        stolenTasksDeque.add(stolenValue)
-                    } else {
-                        break
-                    }
+                for (i in 1 until stolen.size) {
+                    stolenTasksDeque.add(stolen[i])
                 }
-
-                if (ourTop != Long.MIN_VALUE) {
-                    successStealing++
-                    tasksLowerThanStolen += indexedBinarySearch(stealingBuffer, ourTop, size)
-                }
-                return stealingBuffer[0]
+                return stolen[0]
             }
 
             return Long.MIN_VALUE
         }
 
-        private fun tryUpdate(cur: BfsIntNode) {
+        private fun tryUpdate(cur: IntNode) {
             for (e in cur.outgoingEdges) {
 
-                val to = nodes[e]
+                val to = nodes[e.to]
 
-                while (cur.distance + 1 < to.distance) {
+                while (cur.distance + e.weight < to.distance) {
                     val currDist = cur.distance
                     val toDist = to.distance
-                    val nextDist = currDist + 1
+                    val nextDist = currDist + e.weight
 
                     if (toDist > nextDist && to.casDistance(toDist, nextDist)) {
-                        val task = nextDist.zip(e)
+                        val task = nextDist.zip(e.to)
 
                         insert(task)
                         break
