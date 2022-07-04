@@ -29,5 +29,11 @@ data class BenchmarkResultWithMetrics(
     var tasksFromBufferBetterOrEqualThanSecondTopWithoutEmpty : Long,
     var tasksFromBufferBetterThanSecondTopWithoutEmpty : Long,
 
-    var filledTimes: Long
+    var filledTimes: Long,
+
+    var insertedAfterSteal: Long,
+    var insertedAfterGoodSteal: Long = 0,
+    var insertedAfterBadSteal: Long = 0,
+
+    var nodesCount: Int = 0,
 )

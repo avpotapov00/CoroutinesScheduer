@@ -1,13 +1,16 @@
-package org.jetbrains.kotlin.number.scheduler
+package org.jetbrains.kotlin.number.scheduler.calc
 
 import kotlinx.atomicfu.AtomicArray
 import kotlinx.atomicfu.AtomicRef
 import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.atomicArrayOfNulls
 import org.jetbrains.kotlin.generic.smq.IndexedThread
-import org.jetbrains.kotlin.graph.dijkstra.IntNode
+import org.jetbrains.kotlin.graph.dijkstra.BfsIntNode
 import org.jetbrains.kotlin.number.adaptive.AdaptiveStealingLongMultiQueue
+import org.jetbrains.kotlin.number.scheduler.STEAL_SIZE_LOWER_BOUND
+import org.jetbrains.kotlin.number.scheduler.STEAL_SIZE_UPPER_BOUND
 import org.jetbrains.kotlin.util.firstFromLong
+import org.jetbrains.kotlin.util.indexedBinarySearch
 import org.jetbrains.kotlin.util.secondFromLong
 import org.jetbrains.kotlin.util.zip
 import java.io.Closeable
@@ -15,17 +18,16 @@ import java.util.concurrent.Phaser
 import java.util.concurrent.ThreadLocalRandom
 import java.util.concurrent.locks.LockSupport
 
-
 /**
  * @author Потапов Александр
- * @since 27.04.2022
+ * @since 23.05.2022
  */
-class AdaptiveDijkstraScheduler(
-    private val nodes: List<IntNode>,
+class AdaptiveBfsSchedulerMetrics(
+    private val nodes: List<BfsIntNode>,
     startIndex: Int,
     val poolSize: Int,
     val stealSize: Int = 3,
-    pSteal: Double = 0.04,
+    val pSteal: Double = 0.04,
     // The number of attempts to take a task from one thread
     private val retryCount: Int = 100,
     private val checkCount: Int = 1024
@@ -72,6 +74,18 @@ class AdaptiveDijkstraScheduler(
 
     inner class Worker(override val index: Int) : IndexedThread() {
 
+        // For stolen sum calc
+        var stolenTotalTimesStats = 0
+        var sumStolenStats = 0
+        var effectiveStealSize = stealSize
+        var pStealEffective = pSteal / (effectiveStealSize * (1 - pSteal))
+
+        var totalTasksProcessed: Long = 0
+        var successStealing: Int = 0
+        var tasksLowerThanStolen: Int = 0
+        var failedStealing: Int = 0
+        var stealingAttempts: Int = 0
+
         val random: ThreadLocalRandom = ThreadLocalRandom.current()
         val stealingBuffer: MutableList<Long> = ArrayList(STEAL_SIZE_UPPER_BOUND)
 
@@ -81,8 +95,12 @@ class AdaptiveDijkstraScheduler(
         // суммарное количество украденного
         var stolenCountSum = 0
 
+        // суммарное количество украденного для метрик
+        var stolenCountSumOnlyForMetrics = 0
+
         // Section 3
         var tasksFromBufferBetterThanTop = 0
+        var tasksFromBufferBetterThanTopOnlyForMetrics = 0
 
         var stealSizeLocal: Int = stealSize
 
@@ -97,6 +115,34 @@ class AdaptiveDijkstraScheduler(
 
         var stolenLastFrom: Int = -1
 
+        // количество раз, когда буффер был заполнен полностью
+        var fullBufferTimesSum = 0
+
+        // количество задач лучше нашего топа, включая те случаи, когда у нас ничего нет
+        var tasksLowerThanStolenIncludingOurEmptiness = 0
+
+        // Section 3
+        var tasksFromBufferBetterOrEqualThanTop = 0
+        var tasksFromBufferBetterOrEqualThanSecondTop = 0
+        var tasksFromBufferBetterThanSecondTop = 0
+
+        var tasksFromBufferBetterThanTopWithoutEmpty = 0
+        var tasksFromBufferBetterOrEqualThanTopWithoutEmpty = 0
+        var tasksFromBufferBetterOrEqualThanSecondTopWithoutEmpty = 0
+        var tasksFromBufferBetterThanSecondTopWithoutEmpty = 0
+
+        // Section 4
+        var isGoodSteal = false
+
+        var insertedAfterSteal: Int = 0
+        var insertedAfterGoodSteal: Int = 0
+        var insertedAfterBadSteal: Int = 0
+
+        // Section 5
+        var updatesCount = 0L
+        var updateAttemptsCount = 0L
+
+
         override fun run() {
             var attempts = 0
             while (!terminated) {
@@ -106,6 +152,7 @@ class AdaptiveDijkstraScheduler(
 
                 if (task != Long.MIN_VALUE) {
                     attempts = 0
+                    totalTasksProcessed++
                     tryUpdate(nodes[task.secondFromLong])
                     continue
                 }
@@ -120,6 +167,7 @@ class AdaptiveDijkstraScheduler(
 
                 if (task != Long.MIN_VALUE) {
                     attempts = 0
+                    totalTasksProcessed++
                     tryUpdate(nodes[task.secondFromLong])
                     continue
                 }
@@ -149,9 +197,46 @@ class AdaptiveDijkstraScheduler(
                 lastDeleteFromBuffer = true
                 val task = ourDeque.removeFirst()
                 val localTop = queues[currThread].getTopLocal()
-
-                if (localTop == Long.MIN_VALUE || task.firstFromLong <= localTop.firstFromLong) {
+                if (localTop == Long.MIN_VALUE) {
+                    isGoodSteal = true
                     tasksFromBufferBetterThanTop++
+                    tasksFromBufferBetterThanTopOnlyForMetrics++
+
+                    tasksFromBufferBetterOrEqualThanTop++
+                    tasksFromBufferBetterThanSecondTop++
+                    tasksFromBufferBetterOrEqualThanSecondTop++
+                } else {
+                    val topFirstFromLong = localTop.firstFromLong
+                    val taskFirstFromLong = task.firstFromLong
+                    if (taskFirstFromLong <= topFirstFromLong) {
+                        isGoodSteal = true
+                        if (taskFirstFromLong < topFirstFromLong) {
+                            tasksFromBufferBetterThanTop++
+                            tasksFromBufferBetterThanTopOnlyForMetrics++
+
+                            tasksFromBufferBetterThanTopWithoutEmpty++
+                        }
+                        tasksFromBufferBetterOrEqualThanTop++
+                        tasksFromBufferBetterOrEqualThanTopWithoutEmpty++
+                    } else {
+                        isGoodSteal = false
+                    }
+
+                    val secondLocalTop = queues[currThread].getSecondTopLocal()
+                    if (secondLocalTop == Long.MIN_VALUE) {
+                        tasksFromBufferBetterThanSecondTop++
+                        tasksFromBufferBetterOrEqualThanSecondTop++
+                    } else {
+                        val secondTopFirstFromLong = secondLocalTop.firstFromLong
+                        if (taskFirstFromLong <= secondTopFirstFromLong) {
+                            if (taskFirstFromLong < secondTopFirstFromLong) {
+                                tasksFromBufferBetterThanSecondTop++
+                                tasksFromBufferBetterThanSecondTopWithoutEmpty++
+                            }
+                            tasksFromBufferBetterOrEqualThanSecondTop++
+                            tasksFromBufferBetterOrEqualThanSecondTopWithoutEmpty++
+                        }
+                    }
                 }
                 return task
             }
@@ -167,7 +252,7 @@ class AdaptiveDijkstraScheduler(
             lastDeleteFromBuffer = false
 
             // Should we steal ?
-            if (shouldSteal()) {
+            if (shouldStealEffective()) {
                 val task = trySteal(currThread)
                 if (task != Long.MIN_VALUE) {
                     return task
@@ -182,6 +267,8 @@ class AdaptiveDijkstraScheduler(
             // The local queue is empty , try to steal
             return trySteal(currThread)
         }
+
+        private fun shouldStealEffective() = random.nextDouble() < pStealEffective
 
         private fun giveFeedback() {
             val otherThread = threads[stolenLastFrom]
@@ -209,17 +296,51 @@ class AdaptiveDijkstraScheduler(
 
             val ourTop = queues[currThread].getTopLocal()
             val otherTop = otherQueue.top
+            if (ourTop != Long.MIN_VALUE) {
+                stealingAttempts++
+            }
+
 
             if (otherTop == Long.MIN_VALUE) return Long.MIN_VALUE
             if (ourTop == Long.MIN_VALUE || otherTop.firstFromLong < ourTop.firstFromLong) {
                 // Try to steal a better task !
                 otherQueue.steal(stealingBuffer)
+
+                if (stealingBuffer.size == stealSize) {
+                    fullBufferTimesSum++
+                }
+
                 stealingTotal++
+                stolenTotalTimesStats++
+
                 stolenCountSum = stealingBuffer.size
+                stolenCountSumOnlyForMetrics += stealingBuffer.size
+                sumStolenStats += stealingBuffer.size
+
+                // пересчитываем при необходимости effectiveStealSize
+                if (stolenTotalTimesStats > 100) {
+                    effectiveStealSize = sumStolenStats / stolenTotalTimesStats
+                    pStealEffective = pSteal / (effectiveStealSize * (1 - pSteal))
+
+                    sumStolenStats = 0
+                    stolenTotalTimesStats = 0
+                }
 
                 if (stealingBuffer.isEmpty()) {
+                    failedStealing++
                     return Long.MIN_VALUE
                 } // failed
+
+                if (ourTop != Long.MIN_VALUE) {
+                    successStealing++
+
+                    val tasksBetter = indexedBinarySearch(stealingBuffer, ourTop)
+
+                    tasksLowerThanStolen += tasksBetter
+                    tasksLowerThanStolenIncludingOurEmptiness += tasksBetter
+                } else {
+                    tasksLowerThanStolenIncludingOurEmptiness += stealingBuffer.size
+                }
 
                 // Return the first task and add the others
                 // to the thread - local buffer of stolen ones
@@ -292,19 +413,22 @@ class AdaptiveDijkstraScheduler(
             }
         }
 
-        private fun tryUpdate(cur: IntNode) {
+        private fun tryUpdate(cur: BfsIntNode) {
+            updateAttemptsCount += cur.outgoingEdges.size
+
             for (e in cur.outgoingEdges) {
 
-                val to = nodes[e.to]
+                val to = nodes[e]
 
-                while (cur.distance + e.weight < to.distance) {
+                while (cur.distance + 1 < to.distance) {
                     val currDist = cur.distance
                     val toDist = to.distance
-                    val nextDist = currDist + e.weight
+                    val nextDist = currDist + 1
 
                     if (toDist > nextDist && to.casDistance(toDist, nextDist)) {
-                        val task = nextDist.zip(e.to)
+                        val task = nextDist.zip(e)
 
+                        updatesCount++
                         insert(task)
                         break
                     }
@@ -319,6 +443,14 @@ class AdaptiveDijkstraScheduler(
         }
 
         fun insert(task: Long) {
+            if (lastDeleteFromBuffer) {
+                insertedAfterSteal++
+                if (isGoodSteal) {
+                    insertedAfterGoodSteal++
+                } else {
+                    insertedAfterBadSteal++
+                }
+            }
             checkUpdateStealSize()
 
             queues[index].addLocal(task)
@@ -424,6 +556,99 @@ class AdaptiveDijkstraScheduler(
         val betterSum: Int,
         val count: Int
     )
+
+
+    fun totalTasksProcessed(): Long {
+        return threads.sumOf { it.totalTasksProcessed }
+    }
+
+    fun successStealing(): Long {
+        return threads.sumOf { it.successStealing.toLong() }
+    }
+
+    fun failedStealing(): Long {
+        return threads.sumOf { it.failedStealing.toLong() }
+    }
+
+    fun stealingAttempts(): Long {
+        return threads.sumOf { it.stealingAttempts.toLong() }
+    }
+
+    fun tasksLowerThanStolen(): Long {
+        return threads.sumOf { it.tasksLowerThanStolen.toLong() }
+    }
+
+    fun stealingTotal(): Long {
+        return threads.sumOf { it.stealingTotal.toLong() }
+    }
+
+    fun stolenCountSum(): Long {
+        return threads.sumOf { it.stolenCountSumOnlyForMetrics.toLong() }
+    }
+
+    fun fullBufferTimesSum(): Long {
+        return threads.sumOf { it.fullBufferTimesSum.toLong() }
+    }
+
+    fun tasksLowerThanStolenIncludingOurEmptiness(): Long {
+        return threads.sumOf { it.tasksLowerThanStolenIncludingOurEmptiness.toLong() }
+    }
+
+    fun tasksFromBufferBetterThanTop(): Long {
+        return threads.sumOf { it.tasksFromBufferBetterThanTopOnlyForMetrics.toLong() }
+    }
+
+    fun tasksFromBufferBetterOrEqualThanTop(): Long {
+        return threads.sumOf { it.tasksFromBufferBetterOrEqualThanTop.toLong() }
+    }
+
+    fun tasksFromBufferBetterThanTopWithoutEmpty(): Long {
+        return threads.sumOf { it.tasksFromBufferBetterThanTopWithoutEmpty.toLong() }
+    }
+
+    fun tasksFromBufferBetterOrEqualThanTopWithoutEmpty(): Long {
+        return threads.sumOf { it.tasksFromBufferBetterOrEqualThanTopWithoutEmpty.toLong() }
+    }
+
+    fun tasksFromBufferBetterThanSecondTop(): Long {
+        return threads.sumOf { it.tasksFromBufferBetterThanSecondTop.toLong() }
+    }
+
+    fun tasksFromBufferBetterOrEqualThanSecondTop(): Long {
+        return threads.sumOf { it.tasksFromBufferBetterOrEqualThanSecondTop.toLong() }
+    }
+
+    fun tasksFromBufferBetterThanSecondTopWithoutEmpty(): Long {
+        return threads.sumOf { it.tasksFromBufferBetterThanSecondTopWithoutEmpty.toLong() }
+    }
+
+    fun tasksFromBufferBetterOrEqualThanSecondTopWithoutEmpty(): Long {
+        return threads.sumOf { it.tasksFromBufferBetterOrEqualThanSecondTopWithoutEmpty.toLong() }
+    }
+
+    fun filledTimes(): Long {
+        return queues.sumOf { it.filledTimes.toLong() }
+    }
+
+    fun insertedAfterSteal(): Long {
+        return threads.sumOf { it.insertedAfterSteal.toLong() }
+    }
+
+    fun insertedAfterGoodSteal(): Long {
+        return threads.sumOf { it.insertedAfterGoodSteal.toLong() }
+    }
+
+    fun insertedAfterBadSteal(): Long {
+        return threads.sumOf { it.insertedAfterBadSteal.toLong() }
+    }
+
+    fun updatesCount(): Long {
+        return threads.sumOf { it.updatesCount }
+    }
+
+    fun updateAttemptsCount(): Long {
+        return threads.sumOf { it.updateAttemptsCount }
+    }
 
 }
 
