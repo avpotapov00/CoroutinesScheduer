@@ -1,32 +1,33 @@
-package org.jetbrains.kotlin.number.scheduler
+package org.jetbrains.kotlin.generic
 
 import kotlinx.atomicfu.AtomicArray
 import kotlinx.atomicfu.AtomicRef
 import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.atomicArrayOfNulls
 import org.jetbrains.kotlin.generic.smq.IndexedThread
-import org.jetbrains.kotlin.graph.dijkstra.BfsIntNode
+import org.jetbrains.kotlin.generic.smq.StealingMultiQueue
 import org.jetbrains.kotlin.graph.dijkstra.IntNode
-import org.jetbrains.kotlin.number.adaptive.AdaptiveStealingLongMultiQueue
-import org.jetbrains.kotlin.number.smq.StealingLongMultiQueueKS
-import org.jetbrains.kotlin.util.firstFromLong
+import org.jetbrains.kotlin.number.scheduler.STEAL_SIZE_UPPER_BOUND
 import org.jetbrains.kotlin.util.indexedBinarySearch
-import org.jetbrains.kotlin.util.secondFromLong
-import org.jetbrains.kotlin.util.zip
 import java.io.Closeable
+import java.util.Collections
 import java.util.concurrent.Phaser
 import java.util.concurrent.ThreadLocalRandom
 import java.util.concurrent.locks.LockSupport
 
-class PriorityLongBfsSchedulerKS(
-    private val nodes: List<BfsIntNode>,
+/**
+ * @author Потапов Александр
+ * @since 19.07.2022
+ */
+class PriorityMeasurementDijkstraScheduler(
+    private val nodes: List<IntNode>,
     startIndex: Int,
     val poolSize: Int,
     val stealSize: Int = 3,
     val pSteal: Double = 0.04,
     // The number of attempts to take a task from one thread
     private val retryCount: Int = 100,
-) : AdaptiveStealingLongMultiQueue(stealSize, pSteal, poolSize), Closeable {
+) : StealingMultiQueue<IntNodeWrapper>(stealSize, pSteal, poolSize), Closeable {
 
     /**
      * End of work flag
@@ -52,7 +53,7 @@ class PriorityLongBfsSchedulerKS(
     val finishPhaser = Phaser(poolSize + 1)
 
     init {
-        insertGlobal(0.zip(startIndex))
+        insertGlobal(IntNodeWrapper(nodes[startIndex], 0))
 
         nodes[startIndex].distance = 0
         threads.forEach { it.start() }
@@ -75,7 +76,7 @@ class PriorityLongBfsSchedulerKS(
         var stealingAttempts: Int = 0
 
         val random: ThreadLocalRandom = ThreadLocalRandom.current()
-        val stealingBuffer: MutableList<Long> = ArrayList(STEAL_SIZE_UPPER_BOUND)
+        val stealingBuffer: MutableList<IntNodeWrapper> = ArrayList(STEAL_SIZE_UPPER_BOUND)
 
         // количество раз когда что-то украли
         var stealingTotal = 0
@@ -89,9 +90,6 @@ class PriorityLongBfsSchedulerKS(
         // Section 3
         var tasksFromBufferBetterThanTop = 0
         var tasksFromBufferBetterThanTopOnlyForMetrics = 0
-
-        // epoch + better + total
-        var metricsHolder: Metrics = Metrics(0, 0, 0, 0)
 
         var stolenLastFrom: Int = -1
 
@@ -124,7 +122,6 @@ class PriorityLongBfsSchedulerKS(
 
         // Section 6
         var uselessWork = 0L
-        var abortedUpdates = 0L
 
         override fun run() {
             var attempts = 0
@@ -133,10 +130,10 @@ class PriorityLongBfsSchedulerKS(
                 // trying to get from local queue
                 var task = delete()
 
-                if (task != Long.MIN_VALUE) {
+                if (task != null) {
                     attempts = 0
                     totalTasksProcessed++
-                    tryUpdate(task.firstFromLong.toInt(), nodes[task.secondFromLong])
+                    tryUpdate(task)
                     continue
                 }
 
@@ -148,20 +145,19 @@ class PriorityLongBfsSchedulerKS(
                 // if it didn't work, we try to remove it from the global queue
                 task = stealAndDeleteFromGlobal()
 
-                if (task != Long.MIN_VALUE) {
+                if (task != null) {
                     attempts = 0
                     totalTasksProcessed++
-                    tryUpdate(task.firstFromLong.toInt(), nodes[task.secondFromLong])
+                    tryUpdate(task)
                     continue
                 }
 
                 // if it didn't work, we try to remove it from the self queue
                 task = stealAndDeleteFromSelf(index)
 
-                if (task != Long.MIN_VALUE) {
+                if (task != null) {
                     attempts = 0
-                    totalTasksProcessed++
-                    tryUpdate(task.firstFromLong.toInt(), nodes[task.secondFromLong])
+                    tryUpdate(task)
                     continue
                 }
 
@@ -172,7 +168,7 @@ class PriorityLongBfsSchedulerKS(
 
         private var lastDeleteFromBuffer = false
 
-        private fun delete(): Long {
+        private fun delete(): IntNodeWrapper? {
             val currThread = index
 
             // Do we have previously stolen tasks ?
@@ -181,7 +177,7 @@ class PriorityLongBfsSchedulerKS(
                 lastDeleteFromBuffer = true
                 val task = ourDeque.removeFirst()
                 val localTop = queues[currThread].getTopLocal()
-                if (localTop == Long.MIN_VALUE) {
+                if (localTop == null) {
                     isGoodSteal = true
                     tasksFromBufferBetterThanTop++
                     tasksFromBufferBetterThanTopOnlyForMetrics++
@@ -190,8 +186,8 @@ class PriorityLongBfsSchedulerKS(
                     tasksFromBufferBetterThanSecondTop++
                     tasksFromBufferBetterOrEqualThanSecondTop++
                 } else {
-                    val topFirstFromLong = localTop.firstFromLong
-                    val taskFirstFromLong = task.firstFromLong
+                    val topFirstFromLong = localTop.metrics
+                    val taskFirstFromLong = task.metrics
                     if (taskFirstFromLong <= topFirstFromLong) {
                         isGoodSteal = true
                         if (taskFirstFromLong < topFirstFromLong) {
@@ -207,11 +203,11 @@ class PriorityLongBfsSchedulerKS(
                     }
 
                     val secondLocalTop = queues[currThread].getSecondTopLocal()
-                    if (secondLocalTop == Long.MIN_VALUE) {
+                    if (secondLocalTop == null) {
                         tasksFromBufferBetterThanSecondTop++
                         tasksFromBufferBetterOrEqualThanSecondTop++
                     } else {
-                        val secondTopFirstFromLong = secondLocalTop.firstFromLong
+                        val secondTopFirstFromLong = secondLocalTop.metrics
                         if (taskFirstFromLong <= secondTopFirstFromLong) {
                             if (taskFirstFromLong < secondTopFirstFromLong) {
                                 tasksFromBufferBetterThanSecondTop++
@@ -230,14 +226,14 @@ class PriorityLongBfsSchedulerKS(
             // Should we steal ?
             if (shouldStealEffective()) {
                 val task = trySteal(currThread)
-                if (task != Long.MIN_VALUE) {
+                if (task != null) {
                     return task
                 }
             }
             // Try to retrieve the top task
             // from the thread - local queue
             val task = queues[currThread].extractTopLocal()
-            if (task != Long.MIN_VALUE) {
+            if (task != null) {
                 return task
             }
             // The local queue is empty , try to steal
@@ -246,7 +242,7 @@ class PriorityLongBfsSchedulerKS(
 
         private fun shouldStealEffective() = random.nextDouble() < pSteal
 
-        private fun trySteal(currThread: Int): Long {
+        private fun trySteal(currThread: Int): IntNodeWrapper? {
             // Choose a random queue and check whether
             // its top task has higher priority
 
@@ -255,13 +251,13 @@ class PriorityLongBfsSchedulerKS(
 
             val ourTop = queues[currThread].getTopLocal()
             val otherTop = otherQueue.top
-            if (ourTop != Long.MIN_VALUE) {
+            if (ourTop != null) {
                 stealingAttempts++
             }
 
 
-            if (otherTop == Long.MIN_VALUE) return Long.MIN_VALUE
-            if (ourTop == Long.MIN_VALUE || otherTop.firstFromLong < ourTop.firstFromLong) {
+            if (otherTop == null) return null
+            if (ourTop == null || otherTop.metrics < ourTop.metrics) {
                 // Try to steal a better task !
                 otherQueue.steal(stealingBuffer)
 
@@ -278,12 +274,13 @@ class PriorityLongBfsSchedulerKS(
 
                 if (stealingBuffer.isEmpty()) {
                     failedStealing++
-                    return Long.MIN_VALUE
+                    return null
                 } // failed
 
-                if (ourTop != Long.MIN_VALUE) {
+                if (ourTop != null) {
                     successStealing++
 
+                    Collections.binarySearch(stealingBuffer, ourTop)
                     val tasksBetter = indexedBinarySearch(stealingBuffer, ourTop)
 
                     tasksLowerThanStolen += tasksBetter
@@ -304,7 +301,7 @@ class PriorityLongBfsSchedulerKS(
                 return stealingBuffer[0]
             }
 
-            return Long.MIN_VALUE
+            return null
         }
 
         private fun goWait() {
@@ -355,30 +352,26 @@ class PriorityLongBfsSchedulerKS(
             }
         }
 
-        private fun tryUpdate(oldValue: Int, cur: BfsIntNode) {
-            if (cur.distance < oldValue) {
-                abortedUpdates++
-                return
-            }
+        private fun tryUpdate(curWrapper: IntNodeWrapper) {
+            val cur = curWrapper.intNode
             updateAttemptsCount += cur.outgoingEdges.size
+
+            if (cur.distance < curWrapper.metrics) {
+                uselessWork++
+            }
 
             for (e in cur.outgoingEdges) {
 
-                val to = nodes[e]
+                val to = nodes[e.to]
 
-                while (cur.distance + 1 < to.distance) {
+                while (cur.distance + e.weight < to.distance) {
                     val currDist = cur.distance
                     val toDist = to.distance
-                    val nextDist = currDist + 1
+                    val nextDist = currDist + e.weight
 
                     if (toDist > nextDist && to.casDistance(toDist, nextDist)) {
-                        val task = nextDist.zip(e)
-
                         updatesCount++
-                        insert(task)
-                        if (toDist != Int.MAX_VALUE) {
-                            uselessWork++
-                        }
+                        insert(IntNodeWrapper(to, nextDist))
                         break
                     }
                 }
@@ -387,7 +380,7 @@ class PriorityLongBfsSchedulerKS(
             checkWakeThread()
         }
 
-        fun insert(task: Long) {
+        fun insert(task: IntNodeWrapper) {
             if (lastDeleteFromBuffer) {
                 insertedAfterSteal++
                 if (isGoodSteal) {
@@ -408,14 +401,6 @@ class PriorityLongBfsSchedulerKS(
         threads.forEach { it.interrupt() }
         threads.forEach { it.join() }
     }
-
-    data class Metrics(
-        val epoch: Int,
-        val stolenSum: Int,
-        val betterSum: Int,
-        val count: Int
-    )
-
 
     fun totalTasksProcessed(): Long {
         return threads.sumOf { it.totalTasksProcessed }
@@ -502,18 +487,16 @@ class PriorityLongBfsSchedulerKS(
     }
 
     fun updatesCount(): Long {
-        return threads.sumOf { it.updatesCount.toLong() }
+        return threads.sumOf { it.updatesCount }
     }
 
     fun updateAttemptsCount(): Long {
-        return threads.sumOf { it.updateAttemptsCount.toLong() }
+        return threads.sumOf { it.updateAttemptsCount }
     }
 
     fun uselessWork(): Long {
         return threads.sumOf { it.uselessWork }
     }
-
-    fun abortedUpdates(): Long = threads.sumOf { it.abortedUpdates }
 
 }
 
@@ -523,3 +506,15 @@ private const val TASKS_COUNT_WAKE_THRESHOLD = 30
 
 // The number of cells that we will look at trying to wake up the thread
 private const val WAKE_RETRY_COUNT = 5
+
+data class IntNodeWrapper(
+    val intNode: IntNode,
+    val metrics: Int
+): Comparable<IntNodeWrapper> {
+
+    override fun compareTo(other: IntNodeWrapper): Int {
+        return metrics.compareTo(other.metrics)
+    }
+
+
+}

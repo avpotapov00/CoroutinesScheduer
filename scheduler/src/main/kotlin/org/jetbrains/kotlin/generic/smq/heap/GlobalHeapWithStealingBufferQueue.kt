@@ -42,5 +42,35 @@ class GlobalHeapWithStealingBufferQueue<E : Comparable<E>>(
 
         return result
     }
+
+    @Synchronized
+    override fun steal(data: MutableList<E>) {
+        data.clear()
+        for (polled in (0 until stealSize)) {
+            val element = queue.poll()
+
+            if (element == null) {
+                _size.addAndGet(-polled)
+                return
+            }
+            data.add(element)
+        }
+    }
+
+    @Synchronized
+    override fun steal(data: Array<E?>) {
+        for (polled in (0 until stealSize)) {
+            val element = queue.poll()
+
+            if (element == null) {
+                _size.addAndGet(-polled)
+                data[polled] = null
+                return
+            }
+
+            data[polled] = element
+        }
+    }
+
 }
 

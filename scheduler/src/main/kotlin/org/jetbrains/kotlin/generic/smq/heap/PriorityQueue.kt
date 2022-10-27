@@ -1,5 +1,7 @@
 package org.jetbrains.kotlin.generic.smq.heap
 
+import kotlin.math.min
+
 @Suppress("UNCHECKED_CAST")
 class PriorityQueue<T : Comparable<T>>(
     private val arity: Int,
@@ -99,6 +101,20 @@ class PriorityQueue<T : Comparable<T>>(
                     + if (queue.size < 64) (queue.size + 1) else queue.size shr 1)
             queue = queue.copyOf(newCapacity)
         }
+    }
+
+    fun getSecondTop(): T? {
+        if (maxIndex < 1) return null
+        var min = queue[1] as T
+
+        for (i in 2 .. min(maxIndex, 4)) {
+            val next = queue[i] as T
+            if (min > next) {
+                min = next
+            }
+        }
+
+        return min
     }
 
     companion object {

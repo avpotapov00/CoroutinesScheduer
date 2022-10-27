@@ -54,6 +54,3 @@ open class AdaptiveStealingLongMultiQueue(
 
     fun currThread(): Int = (Thread.currentThread() as IndexedThread).index
 }
-
-
-

@@ -1,6 +1,7 @@
 package org.jetbrains.kotlin.number.scheduler
 
 import kotlinx.coroutines.runBlocking
+import org.jetbrains.kotlin.generic.PriorityMeasurementDijkstraScheduler
 import org.jetbrains.kotlin.graph.dijkstra.IntNode
 import org.jetbrains.kotlin.graph.dijkstra.clearNodes
 import org.jetbrains.kotlin.graph.dijkstra.randomConnectedIntGraph
@@ -58,7 +59,7 @@ internal class PriorityLongDijkstraSchedulerTest {
             b.value.addEdge(a.index, 1)
         }
 
-        PriorityLongDijkstraSchedulerKS(nodesList, 0, 1, stealSize = 1, pSteal = 1.0, retryCount = 3).use {
+        PriorityMeasurementDijkstraScheduler(nodesList, 0, 1, stealSize = 1, pSteal = 1.0, retryCount = 3).use {
             it.waitForTermination()
         }
 
@@ -78,7 +79,7 @@ internal class PriorityLongDijkstraSchedulerTest {
         b.addEdge(2, 1)
         a.addEdge(2, 4)
 
-        val dijkstraScheduler = PriorityLongDijkstraSchedulerKS(nodesList, 0, 4)
+        val dijkstraScheduler = PriorityMeasurementDijkstraScheduler(nodesList, 0, 4)
 
         dijkstraScheduler.waitForTermination()
 
@@ -181,7 +182,7 @@ internal class PriorityLongDijkstraSchedulerTest {
         val seqRes = nodesList.map { it.distance }
         clearNodes(nodesList)
 
-        PriorityLongDijkstraSchedulerKS(nodesList, from, 4, pSteal = 0.25).use { scheduler ->
+        PriorityMeasurementDijkstraScheduler(nodesList, from, 4, pSteal = 0.25).use { scheduler ->
 
             scheduler.waitForTermination()
 

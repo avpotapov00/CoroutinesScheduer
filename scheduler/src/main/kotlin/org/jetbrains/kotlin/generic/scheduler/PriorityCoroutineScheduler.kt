@@ -66,7 +66,7 @@ class SMQPriorityCoroutineScheduler(
 
         if (currentThread is Worker) {
             // insert into local queue
-            insert(task)
+//            insert(task) TODO!
             currentThread.checkWakeThread()
         } else {
             // insert into global queue
@@ -107,39 +107,39 @@ class SMQPriorityCoroutineScheduler(
             while (!terminated) {
 
                 // trying to get from local queue
-                var task = delete()
+                var task = TODO() //delete()
 
-                if (task != null) {
-                    attempts = 0
-                    task.task.run()
-                    continue
-                }
-
-                if (attempts < retryCount) {
-                    attempts++
-                    continue
-                }
-
-                // if it didn't work, we try to remove it from the global queue
-                task = stealAndDeleteFromGlobal()
-
-                if (task != null) {
-                    attempts = 0
-                    task.task.run()
-                    continue
-                }
-
-                // if it didn't work, we try to remove it from self
-                task = stealAndDeleteFromSelf()
-
-                if (task != null) {
-                    attempts = 0
-                    task.task.run()
-                    continue
-                }
-
-                goWait()
-                attempts = 0
+//                if (task != null) {
+//                    attempts = 0
+//                    task.task.run()
+//                    continue
+//                }
+//
+//                if (attempts < retryCount) {
+//                    attempts++
+//                    continue
+//                }
+//
+//                // if it didn't work, we try to remove it from the global queue
+//                task = stealAndDeleteFromGlobal()
+//
+//                if (task != null) {
+//                    attempts = 0
+//                    task.task.run()
+//                    continue
+//                }
+//
+//                // if it didn't work, we try to remove it from self
+//                task = stealAndDeleteFromSelf()
+//
+//                if (task != null) {
+//                    attempts = 0
+//                    task.task.run()
+//                    continue
+//                }
+//
+//                goWait()
+//                attempts = 0
             }
         }
 

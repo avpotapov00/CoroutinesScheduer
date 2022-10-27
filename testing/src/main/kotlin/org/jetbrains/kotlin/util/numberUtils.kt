@@ -8,6 +8,19 @@ fun Int.zip(other: Int) = this.toLong() shl 32 or (other.toLong() and 0xffffffff
 
 fun Long.unzip() = this.firstFromLong to this.secondFromLong
 
+fun <T: Comparable<T>> indexedBinarySearch(l: List<T>, key: T): Int {
+    var low = 0
+    var high = l.size - 1
+    while (low <= high) {
+        val mid = low + high ushr 1
+        val midVal = l[mid]
+        val firstFromLongMidVal = midVal
+        if (firstFromLongMidVal < key) low = mid + 1 else if (firstFromLongMidVal > key) high =
+            mid - 1 else return mid // key found
+    }
+    return low // key not found
+}
+
 fun indexedBinarySearch(l: List<Long>, key: Long): Int {
     val keyFirst = key.firstFromLong
 
