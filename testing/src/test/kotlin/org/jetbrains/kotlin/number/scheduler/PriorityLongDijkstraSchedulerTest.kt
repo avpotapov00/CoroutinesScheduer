@@ -7,6 +7,7 @@ import org.jetbrains.kotlin.graph.dijkstra.clearNodes
 import org.jetbrains.kotlin.graph.dijkstra.randomConnectedIntGraph
 import org.jetbrains.kotlin.graph.dijkstra.shortestPathSequentialLong
 import org.jetbrains.kotlin.graph.util.generator.generateBamboo
+import org.jetbrains.kotlin.number.adaptive.new.AdaptiveDijkstraScheduler
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.RepeatedTest
 import org.junit.jupiter.api.Test
@@ -59,7 +60,14 @@ internal class PriorityLongDijkstraSchedulerTest {
             b.value.addEdge(a.index, 1)
         }
 
-        PriorityMeasurementDijkstraScheduler(nodesList, 0, 1, stealSize = 1, pSteal = 1.0, retryCount = 3).use {
+        AdaptiveDijkstraScheduler(
+            startIndex = 0,
+            nodes = nodesList,
+            poolSize = 4,
+            pStealInitialPower = 3,
+            stealSizeInitialPower = 4,
+            writerThreadFrequency = 2
+        ).use {
             it.waitForTermination()
         }
 
@@ -79,7 +87,14 @@ internal class PriorityLongDijkstraSchedulerTest {
         b.addEdge(2, 1)
         a.addEdge(2, 4)
 
-        val dijkstraScheduler = PriorityMeasurementDijkstraScheduler(nodesList, 0, 4)
+        val dijkstraScheduler = AdaptiveDijkstraScheduler(
+            nodesList,
+            0,
+            4,
+            pStealInitialPower = 3,
+            stealSizeInitialPower = 4,
+            writerThreadFrequency = 2
+        )
 
         dijkstraScheduler.waitForTermination()
 
@@ -182,7 +197,14 @@ internal class PriorityLongDijkstraSchedulerTest {
         val seqRes = nodesList.map { it.distance }
         clearNodes(nodesList)
 
-        PriorityMeasurementDijkstraScheduler(nodesList, from, 4, pSteal = 0.25).use { scheduler ->
+        AdaptiveDijkstraScheduler(
+            nodesList,
+            from,
+            4,
+            pStealInitialPower = 3,
+            stealSizeInitialPower = 4,
+            writerThreadFrequency = 2
+        ).use { scheduler ->
 
             scheduler.waitForTermination()
 

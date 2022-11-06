@@ -17,7 +17,7 @@ import java.util.concurrent.locks.LockSupport
  * @author Потапов Александр
  * @since 27.04.2022
  */
-class AdaptiveBfsScheduler(
+class OldAdaptiveBfsScheduler(
     private val nodes: List<BfsIntNode>,
     startIndex: Int,
     val poolSize: Int,

@@ -20,7 +20,7 @@ import java.util.concurrent.locks.LockSupport
  * @author Потапов Александр
  * @since 27.04.2022
  */
-class AdaptiveDijkstraScheduler(
+class OldAdaptiveDijkstraScheduler(
     private val nodes: List<IntNode>,
     startIndex: Int,
     val poolSize: Int,

@@ -7,6 +7,7 @@ import kotlin.Comparator
 import kotlin.collections.ArrayList
 
 val NODE_DISTANCE_COMPARATOR = Comparator<Node> { o1, o2 -> o1.rank.compareTo(o2.rank) }
+val INT_NODE_DISTANCE_COMPARATOR = Comparator<IntNode> { o1, o2 -> o1.distance.compareTo(o2.distance) }
 
 data class Edge(val to: Node, val weight: Int)
 
