@@ -1,11 +1,10 @@
-package org.jetbrains.kotlin.number.adaptive.new
+package org.jetbrains.kotlin.number.scheduler
 
 import kotlinx.atomicfu.*
 import org.jetbrains.kotlin.generic.smq.IndexedThread
 import org.jetbrains.kotlin.graph.dijkstra.IntNode
 import org.jetbrains.kotlin.number.adaptive.AdaptiveGlobalHeapWithStealingBufferLongQueue
 import org.jetbrains.kotlin.number.adaptive.AdaptiveHeapWithStealingBufferLongQueue
-import org.jetbrains.kotlin.number.scheduler.STEAL_SIZE_UPPER_BOUND
 import org.jetbrains.kotlin.number.smq.heap.StealingLongQueue
 import org.jetbrains.kotlin.util.*
 import java.io.Closeable
@@ -16,7 +15,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.system.exitProcess
 
-class AdaptiveDijkstraScheduler(
+class NonBlockingAdaptiveLongDijkstraScheduler(
     private val nodes: List<IntNode>,
     startIndex: Int,
     val poolSize: Int,
@@ -287,6 +286,8 @@ class AdaptiveDijkstraScheduler(
         startCurrentMetrics: MetricsHolder
     ) : IndexedThread() {
 
+        private var locked = false
+
         val random: ThreadLocalRandom = ThreadLocalRandom.current()
         val stealingBuffer: MutableList<Long> = ArrayList(STEAL_SIZE_UPPER_BOUND)
 
@@ -335,13 +336,23 @@ class AdaptiveDijkstraScheduler(
             while (!terminated) {
 
                 // trying to get from local queue
+                if (locked) {
+                    finishPhaser.register()
+                }
                 var task = delete()
 
                 if (task != Long.MIN_VALUE) {
                     attempts = 0
+                    if (locked) {
+                        locked = false
+                        onWakeUp()
+                    }
                     tryUpdate(task.firstFromLong.toInt(), nodes[task.secondFromLong])
                     checkForUpdateParameters()
                     continue
+                }
+                if (locked) {
+                    finishPhaser.arriveAndDeregister()
                 }
 
                 if (attempts < retryCount) {
@@ -351,11 +362,19 @@ class AdaptiveDijkstraScheduler(
 
                 // if it didn't work, we try to remove it from the global queue
                 task = stealAndDeleteFromGlobal()
-
                 if (task != Long.MIN_VALUE) {
+                    if (locked) {
+                        finishPhaser.register()
+                        locked = false
+                        onWakeUp()
+                    }
                     attempts = 0
                     tryUpdate(task.firstFromLong.toInt(), nodes[task.secondFromLong])
                     checkForUpdateParameters()
+                    continue
+                }
+
+                if (locked) {
                     continue
                 }
 
@@ -363,14 +382,27 @@ class AdaptiveDijkstraScheduler(
                 task = stealAndDeleteFromSelf(index)
 
                 if (task != Long.MIN_VALUE) {
+                    if (locked) {
+                        finishPhaser.register()
+                        locked = false
+                        onWakeUp()
+                    }
                     attempts = 0
                     tryUpdate(task.firstFromLong.toInt(), nodes[task.secondFromLong])
                     checkForUpdateParameters()
                     continue
                 }
 
-                goWait()
-                attempts = 0
+                if (!locked) {
+                    finishPhaser.arriveAndDeregister()
+                }
+                locked = true
+                // Вычитаем значение из метрики, наш голос в ней уже точно есть, поэтому меньше 0 не опустится
+                if (currentMetrics.isSyncMode) {
+                    unregisterAndUnSync()
+                } else {
+                    unregister()
+                }
             }
         }
 
@@ -864,32 +896,6 @@ class AdaptiveDijkstraScheduler(
             return Long.MIN_VALUE
         }
 
-        private fun goWait() {
-            var oldThread: Worker?
-
-            do {
-                oldThread = sleepingBox.value
-            } while (!sleepingBox.compareAndSet(oldThread, this))
-
-            do {
-                val index = random.nextInt(0, sleepingArray.size)
-                val cell = sleepingArray[index].value
-            } while (!sleepingArray[index].compareAndSet(cell, oldThread))
-
-            // Вычитаем значение из метрики, наш голос в ней уже точно есть, поэтому меньше 0 не опустится
-            if (currentMetrics.isSyncMode) {
-                unregisterAndUnSync()
-            } else {
-                unregister()
-            }
-            finishPhaser.arriveAndDeregister()
-//            printAsCurrentThread("Sleep")
-            LockSupport.park()
-//            printAsCurrentThread("Wake")
-            // в этот момент могли переключить с sync на eval
-            finishPhaser.register()
-            onWakeUp()
-        }
 
         private fun unregisterAndUnSync() {
             val startCurrentMetrics = currentMetrics
@@ -1083,30 +1089,30 @@ class AdaptiveDijkstraScheduler(
 
         private fun casGlobalValue(expected: MetricsHolder, new: MetricsHolder): Boolean { //, message: String): Boolean  =
 //            synchronized(this@AdaptiveDijkstraScheduler) {
-                if (new.syncCount < 0 || new.syncCount > poolSize) {
-                    printAsCurrentThread("internal error: casGlobalValue: syncCount=${new.syncCount}")
-                    myExitProcess(1)
-                }
-                if (new.activeCount < 0 || new.activeCount > poolSize) {
-                    printAsCurrentThread("internal error: casGlobalValue: activeCount=${new.activeCount}")
-                    myExitProcess(1)
-                }
-                val result = globalMetrics.compareAndSet(expected, new)
+            if (new.syncCount < 0 || new.syncCount > poolSize) {
+                printAsCurrentThread("internal error: casGlobalValue: syncCount=${new.syncCount}")
+                myExitProcess(1)
+            }
+            if (new.activeCount < 0 || new.activeCount > poolSize) {
+                printAsCurrentThread("internal error: casGlobalValue: activeCount=${new.activeCount}")
+                myExitProcess(1)
+            }
+            val result = globalMetrics.compareAndSet(expected, new)
 
 //                if (result) {
 //                    printAsCurrentThread("$message : $new")
 //                }
-                if (expected == new) {
-                    printAsCurrentThread("internal error: setting same value")
-                    myExitProcess(1)
-                }
-                if (expected.epoch > new.epoch) {
-                    printAsCurrentThread("internal error: expected.epoch > new.epoch, expected=$expected, new=$new")
-                    myExitProcess(1)
-                }
-
-                return result
+            if (expected == new) {
+                printAsCurrentThread("internal error: setting same value")
+                myExitProcess(1)
             }
+            if (expected.epoch > new.epoch) {
+                printAsCurrentThread("internal error: expected.epoch > new.epoch, expected=$expected, new=$new")
+                myExitProcess(1)
+            }
+
+            return result
+        }
 
     }
 

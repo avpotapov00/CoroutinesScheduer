@@ -1,0 +1,2 @@
+scp mq:/home/ubuntu/exp/bug-thread-36-changeLog-threads-72-pStealInitialPower-0-stealSizeInitialPower-0.txt /Users/aleksandrpotapov/Documents/CoroutinesScheduer/raw
+scp mq:/home/ubuntu/exp/bug-thread-36-messages-threads-72-pStealInitialPower-0-stealSizeInitialPower-0.txt.txt /Users/aleksandrpotapov/Documents/CoroutinesScheduer/raw

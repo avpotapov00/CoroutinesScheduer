@@ -66,7 +66,7 @@ internal class PriorityLongDijkstraSchedulerTest {
             poolSize = 4,
             pStealInitialPower = 3,
             stealSizeInitialPower = 4,
-            writerThreadFrequency = 2
+            writerThreadFrequency = 2,
         ).use {
             it.waitForTermination()
         }

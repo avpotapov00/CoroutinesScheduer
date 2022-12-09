@@ -1,10 +1,12 @@
 package org.jetbrains.kotlin.number
 
 import org.jetbrains.kotlin.graph.GraphReader
+import org.jetbrains.kotlin.graph.dijkstra.IntNode
 import org.jetbrains.kotlin.graph.dijkstra.clearNodes
 import org.jetbrains.kotlin.graph.dijkstra.shortestPathSequentialLong
 import org.jetbrains.kotlin.mq.singleThreadPriorityQueueDijkstra
 import org.jetbrains.kotlin.number.adaptive.new.AdaptiveDijkstraScheduler
+import org.jetbrains.kotlin.number.scheduler.NonBlockingAdaptiveLongDijkstraScheduler
 
 fun main() {
     println("Start!")
@@ -20,21 +22,46 @@ fun main() {
 
     println("Real start!")
 
-    val scheduler = AdaptiveDijkstraScheduler(
-        graph, pStealInitialPower = 5,
-        stealSizeInitialPower = 4,
-        poolSize = 8,
-        startIndex = 0,
-        metricsUpdateThreshold = 200,
-        writerThreadFrequency = 1
-    ).use {
-        it.waitForTermination()
-        it
+    repeat(100) { testIndex ->
+        val scheduler = NonBlockingAdaptiveLongDijkstraScheduler(
+            graph, pStealInitialPower = 4,
+            stealSizeInitialPower = 4,
+            poolSize = 16,
+            startIndex = 0,
+            metricsUpdateThreshold = 100,
+            writerThreadFrequency = 1,
+            retryCount = 10
+        ).use {
+            it.waitForTermination()
+            it
+        }
+        println("Done: $testIndex, parametersUpdateCount=${scheduler.parametersUpdateCount()}, globalMetrics=${scheduler.globalMetrics}")
+
+        clearNodes(graph)
     }
-    println("Done")
+}
 
-//    val parRes = graph.map { it.distance }
-//    check(parRes == seqRes) { "GG" }
+private fun tryCatchBug(
+    graph: List<IntNode>,
+    poolSize: Int,
+    retryCount: Int,
+    iterations: Int
+) {
+    repeat(iterations) { testIndex ->
+        val scheduler = AdaptiveDijkstraScheduler(
+            graph, pStealInitialPower = 0,
+            stealSizeInitialPower = 0,
+            poolSize = poolSize,
+            startIndex = 0,
+            metricsUpdateThreshold = 100,
+            writerThreadFrequency = 1,
+            retryCount = retryCount
+        ).use {
+            it.waitForTermination()
+            it
+        }
+        println("Done: $testIndex")
 
-    clearNodes(graph)
+        clearNodes(graph)
+    }
 }

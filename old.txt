@@ -9,11 +9,10 @@ import org.jetbrains.kotlin.number.scheduler.STEAL_SIZE_UPPER_BOUND
 import org.jetbrains.kotlin.number.smq.heap.StealingLongQueue
 import org.jetbrains.kotlin.util.*
 import java.io.Closeable
+import java.io.File
 import java.util.concurrent.Phaser
 import java.util.concurrent.ThreadLocalRandom
 import java.util.concurrent.locks.LockSupport
-import kotlin.math.max
-import kotlin.math.min
 import kotlin.system.exitProcess
 
 class AdaptiveDijkstraScheduler(
@@ -115,7 +114,7 @@ class AdaptiveDijkstraScheduler(
         val initialMetricsHolder = MetricsHolder(
             pStealPower = pStealInitialPower,
             stealSizePower = stealSizeInitialPower,
-            direction = P_STEAL_INCREASE,
+            direction = STEAL_SIZE_INCREASE_SETUP,
             metricsValue = 0.0,
             epoch = 0,
             isSyncMode = false,
@@ -293,7 +292,7 @@ class AdaptiveDijkstraScheduler(
         var totalTasksProcessed: Long = 0
         var uselessWork = 0L
 
-        var parametersUpdateDirection: Int = P_STEAL_INCREASE
+        var parametersUpdateDirection: Int = STEAL_SIZE_DECREASE
 
         var prevUsefulWorkMetricsValue = 100.0
         var prevTimestamp: Long = System.nanoTime()
@@ -305,21 +304,13 @@ class AdaptiveDijkstraScheduler(
         // statistics
         var successSelfUpdatesCount = 0
         var parametersUpdateCount = 0
-        var minPSteal = pStealPowerLocal
-        var maxPSteal = pStealPowerLocal
-        var minStealSize = stealSizeLocal
-        var maxStealSize = stealSizeLocal
 
         private fun updatePSteal() {
             pStealLocal = calculatePSteal(pStealPowerLocal)
-            minPSteal = min(minPSteal, pStealPowerLocal)
-            maxPSteal = max(maxPSteal, pStealPowerLocal)
         }
 
         private fun updateStealSize() {
             stealSizeLocal = calculateStealSize(stealSizePowerLocal)
-            minStealSize = min(stealSizeLocal, stealSizePowerLocal)
-            maxStealSize = max(stealSizeLocal, stealSizePowerLocal)
         }
 
         private var currentMetrics: MetricsHolder = startCurrentMetrics
@@ -465,113 +456,113 @@ class AdaptiveDijkstraScheduler(
             val currentMetricsValue = (totalTasksProcessed - uselessWork) / (currTimestamp - prevTimestamp).toDouble()
 
             when (parametersUpdateDirection) {
-//                STEAL_SIZE_INCREASE_SETUP -> {
-//                    if (stealSizePowerLocal == STEAL_SIZE_MAX_POWER) {
-//                        tryUpdateGlobalMetricsToSync(
-//                            currentMetrics = currentMetrics,
-//                            pStealPower = pStealPowerLocal,
-//                            stealSizePower = stealSizePowerLocal - 1, // move left (decrease)
-//                            direction = STEAL_SIZE_DECREASE,
-//                            metricsValue = currentMetricsValue,
-//                        )
-//                    } else {
-//                        tryUpdateGlobalMetricsToSync(
-//                            currentMetrics = currentMetrics,
-//                            pStealPower = pStealPowerLocal,
-//                            stealSizePower = stealSizePowerLocal + 1, // move right (increase)
-//                            direction = STEAL_SIZE_INCREASE,
-//                            metricsValue = currentMetricsValue,
-//                        )
-//                    }
-//                }
-//
-//                STEAL_SIZE_INCREASE -> { // can't start from the least stealSize value
-//                    if (stealSizePowerLocal <= STEAL_SIZE_MIN_POWER) {
-//                        println("ERROR! stealSize == STEAL_SIZE_LOWER_BOUND")// \n${changeLog.joinToString("\n") { it.toString() }}")
-//                        myExitProcess(1)
-//                    }
-//                    if (currentMetricsValue > prevUsefulWorkMetricsValue) {
-//                        if (stealSizePowerLocal == STEAL_SIZE_MAX_POWER) {
-//                            tryUpdateGlobalMetricsToSync(
-//                                currentMetrics = currentMetrics,
-//                                pStealPower = pStealPowerLocal,
-//                                stealSizePower = stealSizePowerLocal, // don't change because it is upper bound and metrics increases
-//                                direction = P_STEAL_INCREASE_SETUP,
-//                                metricsValue = currentMetricsValue,
-//                            )
-//                        } else {
-//                            tryUpdateGlobalMetricsToSync(
-//                                currentMetrics = currentMetrics,
-//                                pStealPower = pStealPowerLocal,
-//                                stealSizePower = stealSizePowerLocal + 1, // move right (increase)
-//                                direction = STEAL_SIZE_INCREASE,
-//                                metricsValue = currentMetricsValue,
-//                            )
-//                        }
-//                    } else { // no left bound check because it can't start from the least stealSize value
-//                        tryUpdateGlobalMetricsToSync(
-//                            currentMetrics = currentMetrics,
-//                            pStealPower = pStealPowerLocal,
-//                            stealSizePower = stealSizePowerLocal - 1, // move left (decrease)
-//                            direction = STEAL_SIZE_DECREASE,
-//                            metricsValue = currentMetricsValue,
-//                        )
-//                    }
-//                }
-//
-//                STEAL_SIZE_DECREASE -> { // can't start from the biggest stealSize value
-//                    if (stealSizePowerLocal >= STEAL_SIZE_MAX_POWER) {
-//                        println("ERROR! stealSize == STEAL_SIZE_MAX_VALUE") //\n${changeLog.joinToString("\n") { it.toString() }}")
-//                        myExitProcess(1)
-//                    }
-//                    if (currentMetricsValue > prevUsefulWorkMetricsValue) {
-//                        if (stealSizePowerLocal == STEAL_SIZE_MIN_POWER) {
-//                            tryUpdateGlobalMetricsToSync(
-//                                currentMetrics = currentMetrics,
-//                                pStealPower = pStealPowerLocal,
-//                                stealSizePower = stealSizePowerLocal, // don't change because it is lower bound and metrics increases
-//                                direction = P_STEAL_INCREASE_SETUP,
-//                                metricsValue = currentMetricsValue,
-//                            )
-//                        } else {
-//                            tryUpdateGlobalMetricsToSync(
-//                                currentMetrics = currentMetrics,
-//                                pStealPower = pStealPowerLocal,
-//                                stealSizePower = stealSizePowerLocal - 1, // move left (decrease)
-//                                direction = STEAL_SIZE_DECREASE,
-//                                metricsValue = currentMetricsValue,
-//                            )
-//                        }
-//                    } else {
-//                        tryUpdateGlobalMetricsToSync(
-//                            currentMetrics = currentMetrics,
-//                            pStealPower = pStealPowerLocal,
-//                            stealSizePower = stealSizePowerLocal + 1, // move right (increase)
-//                            direction = P_STEAL_INCREASE_SETUP,
-//                            metricsValue = currentMetricsValue,
-//                        )
-//                    }
-//                }
+                STEAL_SIZE_INCREASE_SETUP -> {
+                    if (stealSizePowerLocal == STEAL_SIZE_MAX_POWER) {
+                        tryUpdateGlobalMetricsToSync(
+                            currentMetrics = currentMetrics,
+                            pStealPower = pStealPowerLocal,
+                            stealSizePower = stealSizePowerLocal - 1, // move left (decrease)
+                            direction = STEAL_SIZE_DECREASE,
+                            metricsValue = currentMetricsValue,
+                        )
+                    } else {
+                        tryUpdateGlobalMetricsToSync(
+                            currentMetrics = currentMetrics,
+                            pStealPower = pStealPowerLocal,
+                            stealSizePower = stealSizePowerLocal + 1, // move right (increase)
+                            direction = STEAL_SIZE_INCREASE,
+                            metricsValue = currentMetricsValue,
+                        )
+                    }
+                }
 
-//                P_STEAL_INCREASE_SETUP -> {
-//                    if (pStealPowerLocal == P_STEAL_MAX_POWER) {
-//                        tryUpdateGlobalMetricsToSync(
-//                            currentMetrics = currentMetrics,
-//                            pStealPower = pStealPowerLocal - 1,  // move left (decrease)
-//                            stealSizePower = stealSizePowerLocal,
-//                            direction = P_STEAL_DECREASE,
-//                            metricsValue = currentMetricsValue,
-//                        )
-//                    } else {
-//                        tryUpdateGlobalMetricsToSync(
-//                            currentMetrics = currentMetrics,
-//                            pStealPower = pStealPowerLocal + 1, // move right (increase),
-//                            stealSizePower = stealSizePowerLocal,
-//                            direction = P_STEAL_INCREASE,
-//                            metricsValue = currentMetricsValue,
-//                        )
-//                    }
-//                }
+                STEAL_SIZE_INCREASE -> { // can't start from the least stealSize value
+                    if (stealSizePowerLocal <= STEAL_SIZE_MIN_POWER) {
+                        println("ERROR! stealSize == STEAL_SIZE_LOWER_BOUND")// \n${changeLog.joinToString("\n") { it.toString() }}")
+                        myExitProcess(1)
+                    }
+                    if (currentMetricsValue > prevUsefulWorkMetricsValue) {
+                        if (stealSizePowerLocal == STEAL_SIZE_MAX_POWER) {
+                            tryUpdateGlobalMetricsToSync(
+                                currentMetrics = currentMetrics,
+                                pStealPower = pStealPowerLocal,
+                                stealSizePower = stealSizePowerLocal, // don't change because it is upper bound and metrics increases
+                                direction = P_STEAL_INCREASE_SETUP,
+                                metricsValue = currentMetricsValue,
+                            )
+                        } else {
+                            tryUpdateGlobalMetricsToSync(
+                                currentMetrics = currentMetrics,
+                                pStealPower = pStealPowerLocal,
+                                stealSizePower = stealSizePowerLocal + 1, // move right (increase)
+                                direction = STEAL_SIZE_INCREASE,
+                                metricsValue = currentMetricsValue,
+                            )
+                        }
+                    } else { // no left bound check because it can't start from the least stealSize value
+                        tryUpdateGlobalMetricsToSync(
+                            currentMetrics = currentMetrics,
+                            pStealPower = pStealPowerLocal,
+                            stealSizePower = stealSizePowerLocal - 1, // move left (decrease)
+                            direction = STEAL_SIZE_DECREASE,
+                            metricsValue = currentMetricsValue,
+                        )
+                    }
+                }
+
+                STEAL_SIZE_DECREASE -> { // can't start from the biggest stealSize value
+                    if (stealSizePowerLocal >= STEAL_SIZE_MAX_POWER) {
+                        println("ERROR! stealSize == STEAL_SIZE_MAX_VALUE") //\n${changeLog.joinToString("\n") { it.toString() }}")
+                        myExitProcess(1)
+                    }
+                    if (currentMetricsValue > prevUsefulWorkMetricsValue) {
+                        if (stealSizePowerLocal == STEAL_SIZE_MIN_POWER) {
+                            tryUpdateGlobalMetricsToSync(
+                                currentMetrics = currentMetrics,
+                                pStealPower = pStealPowerLocal,
+                                stealSizePower = stealSizePowerLocal, // don't change because it is lower bound and metrics increases
+                                direction = P_STEAL_INCREASE_SETUP,
+                                metricsValue = currentMetricsValue,
+                            )
+                        } else {
+                            tryUpdateGlobalMetricsToSync(
+                                currentMetrics = currentMetrics,
+                                pStealPower = pStealPowerLocal,
+                                stealSizePower = stealSizePowerLocal - 1, // move left (decrease)
+                                direction = STEAL_SIZE_DECREASE,
+                                metricsValue = currentMetricsValue,
+                            )
+                        }
+                    } else {
+                        tryUpdateGlobalMetricsToSync(
+                            currentMetrics = currentMetrics,
+                            pStealPower = pStealPowerLocal,
+                            stealSizePower = stealSizePowerLocal + 1, // move right (increase)
+                            direction = P_STEAL_INCREASE_SETUP,
+                            metricsValue = currentMetricsValue,
+                        )
+                    }
+                }
+
+                P_STEAL_INCREASE_SETUP -> {
+                    if (pStealPowerLocal == P_STEAL_MAX_POWER) {
+                        tryUpdateGlobalMetricsToSync(
+                            currentMetrics = currentMetrics,
+                            pStealPower = pStealPowerLocal - 1,  // move left (decrease)
+                            stealSizePower = stealSizePowerLocal,
+                            direction = P_STEAL_DECREASE,
+                            metricsValue = currentMetricsValue,
+                        )
+                    } else {
+                        tryUpdateGlobalMetricsToSync(
+                            currentMetrics = currentMetrics,
+                            pStealPower = pStealPowerLocal + 1, // move right (increase),
+                            stealSizePower = stealSizePowerLocal,
+                            direction = P_STEAL_INCREASE,
+                            metricsValue = currentMetricsValue,
+                        )
+                    }
+                }
 
                 P_STEAL_INCREASE -> {
                     if (pStealPowerLocal <= P_STEAL_MIN_POWER) {
@@ -582,9 +573,9 @@ class AdaptiveDijkstraScheduler(
                         if (pStealPowerLocal == P_STEAL_MAX_POWER) {
                             tryUpdateGlobalMetricsToSync(
                                 currentMetrics = currentMetrics,
-                                pStealPower = pStealPowerLocal - 1,  // don't change because it is upper bound and metrics increases
+                                pStealPower = pStealPowerLocal,  // don't change because it is upper bound and metrics increases
                                 stealSizePower = stealSizePowerLocal,
-                                direction = P_STEAL_DECREASE,
+                                direction = STEAL_SIZE_INCREASE_SETUP,
                                 metricsValue = currentMetricsValue,
                             )
                         } else {
@@ -616,9 +607,9 @@ class AdaptiveDijkstraScheduler(
                         if (pStealPowerLocal == P_STEAL_MIN_POWER) {
                             tryUpdateGlobalMetricsToSync(
                                 currentMetrics = currentMetrics,
-                                pStealPower = pStealPowerLocal + 1, // don't change because it is lower bound and metrics increases
+                                pStealPower = pStealPowerLocal, // don't change because it is lower bound and metrics increases
                                 stealSizePower = stealSizePowerLocal,
-                                direction = P_STEAL_INCREASE,
+                                direction = STEAL_SIZE_INCREASE_SETUP,
                                 metricsValue = currentMetricsValue,
                             )
                         } else {
@@ -635,7 +626,7 @@ class AdaptiveDijkstraScheduler(
                             currentMetrics = currentMetrics,
                             pStealPower = pStealPowerLocal + 1, // move right (increase)
                             stealSizePower = stealSizePowerLocal,
-                            direction = P_STEAL_INCREASE,
+                            direction = STEAL_SIZE_INCREASE_SETUP,
                             metricsValue = currentMetricsValue,
                         )
                     }
@@ -646,10 +637,10 @@ class AdaptiveDijkstraScheduler(
         }
 
         private fun checkPStealAndStealSize() {
-//            if (stealSizePowerLocal < STEAL_SIZE_MIN_POWER || stealSizePowerLocal > STEAL_SIZE_MAX_POWER) {
-//                println("ERROR! stealSize < STEAL_SIZE_MIN_VALUE || stealSize > STEAL_SIZE_MAX_VALUE: $stealSizePowerLocal")
-//                myExitProcess(1)
-//            }
+            if (stealSizePowerLocal < STEAL_SIZE_MIN_POWER || stealSizePowerLocal > STEAL_SIZE_MAX_POWER) {
+                println("ERROR! stealSize < STEAL_SIZE_MIN_VALUE || stealSize > STEAL_SIZE_MAX_VALUE: $stealSizePowerLocal")
+                myExitProcess(1)
+            }
             if (pStealPowerLocal < P_STEAL_MIN_POWER || pStealPowerLocal > P_STEAL_MAX_POWER) {
                 println("ERROR! pStealPowerLocal < P_STEAL_MIN_POWER || pStealPowerLocal > P_STEAL_MAX_POWER: $pStealPowerLocal")
                 myExitProcess(1)
@@ -1024,7 +1015,6 @@ class AdaptiveDijkstraScheduler(
         }
 
         private fun tryUpdate(oldValue: Int, cur: IntNode) {
-            totalTasksProcessed++
             if (cur.distance < oldValue) {
                 return
             }
@@ -1045,6 +1035,7 @@ class AdaptiveDijkstraScheduler(
                         if (toDist != Int.MAX_VALUE) {
                             uselessWork++
                         }
+                        totalTasksProcessed++
                         break
                     }
                 }
@@ -1129,22 +1120,6 @@ class AdaptiveDijkstraScheduler(
         return threads.map { it.pStealPowerLocal }
     }
 
-    fun minStealSizes(): List<Int> {
-        return threads.map { it.minStealSize }
-    }
-
-    fun maxStealSizes(): List<Int> {
-        return threads.map { it.maxStealSize }
-    }
-
-    fun minPSteal(): List<Int> {
-        return threads.map { it.minPSteal }
-    }
-
-    fun maxPSteal(): List<Int> {
-        return threads.map { it.maxPSteal }
-    }
-
     fun successSelfUpdatesCount(): List<Int> {
         return threads.filter { it.isWriter }.map { it.successSelfUpdatesCount }
     }
@@ -1162,16 +1137,16 @@ private const val TASKS_COUNT_WAKE_THRESHOLD = 30
 // The number of cells that we will look at trying to wake up the thread
 private const val WAKE_RETRY_COUNT = 5
 
-//private const val STEAL_SIZE_INCREASE_SETUP = 1
-//private const val STEAL_SIZE_INCREASE = 2
-//private const val STEAL_SIZE_DECREASE = 3
+private const val STEAL_SIZE_INCREASE_SETUP = 1
+private const val STEAL_SIZE_INCREASE = 2
+private const val STEAL_SIZE_DECREASE = 3
 
-//private const val P_STEAL_INCREASE_SETUP = 4
+private const val P_STEAL_INCREASE_SETUP = 4
 private const val P_STEAL_INCREASE = 5
 private const val P_STEAL_DECREASE = 6
 
 private const val P_STEAL_MAX_POWER = 9
 private const val P_STEAL_MIN_POWER = 0
 
-//private const val STEAL_SIZE_MAX_POWER = 10
-//private const val STEAL_SIZE_MIN_POWER = 0
+private const val STEAL_SIZE_MAX_POWER = 10
+private const val STEAL_SIZE_MIN_POWER = 0
