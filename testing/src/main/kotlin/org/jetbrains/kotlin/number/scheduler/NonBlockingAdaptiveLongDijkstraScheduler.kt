@@ -11,6 +11,9 @@ import java.io.Closeable
 import java.util.concurrent.Phaser
 import java.util.concurrent.ThreadLocalRandom
 import java.util.concurrent.locks.LockSupport
+import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.system.exitProcess
 
 class NonBlockingAdaptiveLongDijkstraScheduler(
@@ -122,7 +125,9 @@ class NonBlockingAdaptiveLongDijkstraScheduler(
         // adaptive
         var totalTasksProcessed: Long = 0
         var uselessWork = 0L
-        var parametersUpdateDirection: Direction = Direction.P_STEAL_INCREASE
+        var parametersUpdateDirection: Direction = Direction.P_STEAL_DECREASE
+        // последняя метрика перед уменьшением (сменой направления), которую мы видели
+        var lastDecreasedMetrics: Double = 0.0
 
         var prevUsefulWorkMetricsValue = 100.0
         var prevTimestamp: Long = System.nanoTime()
@@ -130,10 +135,10 @@ class NonBlockingAdaptiveLongDijkstraScheduler(
         var pStealLocal: Double = calculatePSteal(pStealPowerLocal)
 
         // statistics
-        var parametersUpdateCount = 0
-        var minPSteal = pStealPowerLocal
-        var maxPSteal = pStealPowerLocal
-
+        var parametersUpdateCount: Int = 0
+        var minPSteal: Int = pStealPowerLocal
+        var maxPSteal: Int = pStealPowerLocal
+        var deltaLessThenThresholdCount: Int = 0
 
 //            set(value) { // DEBUG
 //                checkCounters(value)
@@ -222,14 +227,35 @@ class NonBlockingAdaptiveLongDijkstraScheduler(
         */
         private fun updateParameters(currTimestamp: Long) {
             val currentMetricsValue = (totalTasksProcessed - uselessWork) / (currTimestamp - prevTimestamp).toDouble()
+            // Если изменение не существенно - пропускаем итерацию
+            if (abs(currentMetricsValue - prevUsefulWorkMetricsValue) < metricsChangeConsiderableDelta) {
+                prevUsefulWorkMetricsValue = currentMetricsValue
+                deltaLessThenThresholdCount++
+                return
+            }
 
             when (parametersUpdateDirection) {
                 Direction.P_STEAL_INCREASE -> {
                     if (pStealPowerLocal <= P_STEAL_MIN_POWER) {
-                        println("ERROR! pStealPowerLocal == P_STEAL_MIN_POWER") //\n${changeLog.joinToString("\n") { it.toString() }}")
+                        println("ERROR! pStealPowerLocal == P_STEAL_MIN_POWER")
                         myExitProcess(1)
                     }
                     if (currentMetricsValue > prevUsefulWorkMetricsValue) {
+                        if (pStealPowerLocal == P_STEAL_MAX_POWER) {
+                            pStealPowerLocal--
+                            parametersUpdateDirection = Direction.P_STEAL_DECREASE
+                        } else {
+                            pStealPowerLocal++
+                            parametersUpdateDirection = Direction.P_STEAL_INCREASE
+                        }
+                    } else {
+                        parametersUpdateDirection = Direction.P_STEAL_INCREASE_STOP
+                        lastDecreasedMetrics = currentMetricsValue
+                    }
+                }
+
+                Direction.P_STEAL_INCREASE_STOP -> {
+                    if (currentMetricsValue > lastDecreasedMetrics) {
                         if (pStealPowerLocal == P_STEAL_MAX_POWER) {
                             pStealPowerLocal--
                             parametersUpdateDirection = Direction.P_STEAL_DECREASE
@@ -241,7 +267,7 @@ class NonBlockingAdaptiveLongDijkstraScheduler(
                         pStealPowerLocal--
                         parametersUpdateDirection = Direction.P_STEAL_DECREASE
                     }
-                }
+                } // из блока про увеличение stealSize нельзя выйти на самом большом значении
 
                 Direction.P_STEAL_DECREASE -> {
                     if (pStealPowerLocal >= P_STEAL_MAX_POWER) {
@@ -257,16 +283,33 @@ class NonBlockingAdaptiveLongDijkstraScheduler(
                             parametersUpdateDirection = Direction.P_STEAL_DECREASE
                         }
                     } else {
+                        parametersUpdateDirection = Direction.P_STEAL_DECREASE_STOP
+                        lastDecreasedMetrics = currentMetricsValue
+                    }
+                }
+
+                Direction.P_STEAL_DECREASE_STOP -> {
+                    if (currentMetricsValue > lastDecreasedMetrics) {
+                        if (pStealPowerLocal == P_STEAL_MIN_POWER) {
+                            pStealPowerLocal++
+                            parametersUpdateDirection = Direction.P_STEAL_INCREASE
+                        } else {
+                            pStealPowerLocal--
+                            parametersUpdateDirection = Direction.P_STEAL_DECREASE
+                        }
+                    } else {
                         pStealPowerLocal++
                         parametersUpdateDirection = Direction.P_STEAL_INCREASE
                     }
-                }
+                } // из блока про уменьшение stealSize нельзя выйти на самом маленьком значении
             }
             parametersUpdateCount++
 
             prevUsefulWorkMetricsValue = currentMetricsValue
 
             pStealLocal = calculatePSteal(pStealPowerLocal)
+            minPSteal = min(minPSteal, pStealPowerLocal)
+            maxPSteal = max(maxPSteal, pStealPowerLocal)
             checkPSteal()
         }
 
@@ -448,6 +491,10 @@ class NonBlockingAdaptiveLongDijkstraScheduler(
 
     fun parametersUpdateCount(): List<Int> {
         return threads.map { it.parametersUpdateCount }
+    }
+
+    fun deltaLessThenThresholdCount(): List<Int> {
+        return threads.map { it.deltaLessThenThresholdCount }
     }
 
 //    fun log(): List<MetricsHolder> {

@@ -23,7 +23,7 @@ fun main() {
     repeat(100) { testIndex ->
         val scheduler = NonBlockingAdaptiveLongDijkstraScheduler(
             graph,
-            pStealInitialPower = 4,
+            pStealInitialPower = 0,
             stealSizeInitialPower = 4,
             poolSize = 16,
             startIndex = 0,
