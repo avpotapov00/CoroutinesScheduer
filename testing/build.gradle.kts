@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "org.example"
-version = "39.0-SNAPSHOT"
+version = "40.8-SNAPSHOT"
 
 repositories {
     mavenCentral()
@@ -31,6 +31,10 @@ dependencies {
 
     testImplementation("org.jetbrains.kotlin:kotlin-test:1.6.0")
     testImplementation("org.junit.jupiter:junit-jupiter-params:5.7.0")
+
+    // https://mvnrepository.com/artifact/com.fasterxml.jackson.module/jackson-module-kotlin
+    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.14.1")
+
 }
 
 tasks.test {

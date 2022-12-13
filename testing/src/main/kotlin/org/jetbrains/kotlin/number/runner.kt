@@ -3,8 +3,6 @@ package org.jetbrains.kotlin.number
 import org.jetbrains.kotlin.graph.GraphReader
 import org.jetbrains.kotlin.graph.dijkstra.IntNode
 import org.jetbrains.kotlin.graph.dijkstra.clearNodes
-import org.jetbrains.kotlin.graph.dijkstra.shortestPathSequentialLong
-import org.jetbrains.kotlin.mq.singleThreadPriorityQueueDijkstra
 import org.jetbrains.kotlin.number.adaptive.new.AdaptiveDijkstraScheduler
 import org.jetbrains.kotlin.number.scheduler.NonBlockingAdaptiveLongDijkstraScheduler
 
@@ -24,18 +22,18 @@ fun main() {
 
     repeat(100) { testIndex ->
         val scheduler = NonBlockingAdaptiveLongDijkstraScheduler(
-            graph, pStealInitialPower = 4,
+            graph,
+            pStealInitialPower = 4,
             stealSizeInitialPower = 4,
             poolSize = 16,
             startIndex = 0,
-            metricsUpdateThreshold = 100,
-            writerThreadFrequency = 1,
+            metricsUpdateIterations = 1000,
             retryCount = 10
         ).use {
             it.waitForTermination()
             it
         }
-        println("Done: $testIndex, parametersUpdateCount=${scheduler.parametersUpdateCount()}, globalMetrics=${scheduler.globalMetrics}")
+        println("Done: $testIndex, parametersUpdateCount=${scheduler.parametersUpdateCount()}")
 
         clearNodes(graph)
     }
