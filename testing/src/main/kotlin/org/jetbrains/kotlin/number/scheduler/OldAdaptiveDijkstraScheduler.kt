@@ -75,9 +75,6 @@ class OldAdaptiveDijkstraScheduler(
         val random: ThreadLocalRandom = ThreadLocalRandom.current()
         val stealingBuffer: MutableList<Long> = ArrayList(STEAL_SIZE_UPPER_BOUND)
 
-        // количество раз когда что-то украли
-        var stealingTotal = 0
-
         // суммарное количество украденного
         var stolenCountSum = 0
 
@@ -214,7 +211,6 @@ class OldAdaptiveDijkstraScheduler(
             if (ourTop == Long.MIN_VALUE || otherTop.firstFromLong < ourTop.firstFromLong) {
                 // Try to steal a better task !
                 otherQueue.steal(stealingBuffer)
-                stealingTotal++
                 stolenCountSum = stealingBuffer.size
 
                 if (stealingBuffer.isEmpty()) {

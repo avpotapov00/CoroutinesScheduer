@@ -55,7 +55,7 @@ internal class NonBlockingLongDijkstraSchedulerTest {
             b.value.addEdge(a.index, 1)
         }
 
-        NonBlockingAdaptiveLongDijkstraScheduler(nodesList, 0, 1, retryCount = 3).use {
+        NonBlockingAdaptiveByPStealLongDijkstraScheduler(nodesList, 0, 1, retryCount = 3).use {
             it.waitForTermination()
         }
 
@@ -75,7 +75,7 @@ internal class NonBlockingLongDijkstraSchedulerTest {
         b.addEdge(2, 1)
         a.addEdge(2, 4)
 
-        NonBlockingAdaptiveLongDijkstraScheduler(nodesList, 0, 4).use { it.waitForTermination() }
+        NonBlockingAdaptiveByPStealLongDijkstraScheduler(nodesList, 0, 4).use { it.waitForTermination() }
 
         assertEquals(0, a.distance)
         assertEquals(2, b.distance)
@@ -91,7 +91,7 @@ internal class NonBlockingLongDijkstraSchedulerTest {
 
         clearNodes(nodes)
 
-        NonBlockingAdaptiveLongDijkstraScheduler(nodes, 0, 4).use {
+        NonBlockingAdaptiveByPStealLongDijkstraScheduler(nodes, 0, 4).use {
             it.waitForTermination()
             it
         }
@@ -110,7 +110,7 @@ internal class NonBlockingLongDijkstraSchedulerTest {
 
         clearNodes(nodes)
 
-        NonBlockingAdaptiveLongDijkstraScheduler(nodes, 0, 8).use {
+        NonBlockingAdaptiveByPStealLongDijkstraScheduler(nodes, 0, 8).use {
             it.waitForTermination()
         }
 
@@ -178,7 +178,7 @@ internal class NonBlockingLongDijkstraSchedulerTest {
         val seqRes = nodesList.map { it.distance }
         clearNodes(nodesList)
 
-        val scheduler = NonBlockingAdaptiveLongDijkstraScheduler(
+        val scheduler = NonBlockingAdaptiveByPStealLongDijkstraScheduler(
             nodes = nodesList,
             startIndex = from,
             poolSize = 4,
