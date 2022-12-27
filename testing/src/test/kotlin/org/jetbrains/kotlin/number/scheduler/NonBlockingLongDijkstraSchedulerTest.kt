@@ -55,7 +55,15 @@ internal class NonBlockingLongDijkstraSchedulerTest {
             b.value.addEdge(a.index, 1)
         }
 
-        NonBlockingAdaptiveByPStealLongDijkstraScheduler(nodesList, 0, 1, retryCount = 3).use {
+        NonBlockingAdaptiveByPStealLongDijkstraScheduler(
+            nodesList,
+            0,
+            1,
+            retryCount = 3,
+            learningRate = 1e-3,
+            initialMomentum = 1e-3,
+            reverseMomentum = 1e-6
+        ).use {
             it.waitForTermination()
         }
 
@@ -75,7 +83,12 @@ internal class NonBlockingLongDijkstraSchedulerTest {
         b.addEdge(2, 1)
         a.addEdge(2, 4)
 
-        NonBlockingAdaptiveByPStealLongDijkstraScheduler(nodesList, 0, 4).use { it.waitForTermination() }
+        NonBlockingAdaptiveByPStealLongDijkstraScheduler(
+            nodesList, 0, 4,
+            learningRate = 1e-3,
+            initialMomentum = 1e-3,
+            reverseMomentum = 1e-6
+        ).use { it.waitForTermination() }
 
         assertEquals(0, a.distance)
         assertEquals(2, b.distance)
@@ -91,7 +104,12 @@ internal class NonBlockingLongDijkstraSchedulerTest {
 
         clearNodes(nodes)
 
-        NonBlockingAdaptiveByPStealLongDijkstraScheduler(nodes, 0, 4).use {
+        NonBlockingAdaptiveByPStealLongDijkstraScheduler(
+            nodes, 0, 4,
+            learningRate = 1e-3,
+            initialMomentum = 1e-3,
+            reverseMomentum = 1e-6
+        ).use {
             it.waitForTermination()
             it
         }
@@ -110,7 +128,12 @@ internal class NonBlockingLongDijkstraSchedulerTest {
 
         clearNodes(nodes)
 
-        NonBlockingAdaptiveByPStealLongDijkstraScheduler(nodes, 0, 8).use {
+        NonBlockingAdaptiveByPStealLongDijkstraScheduler(
+            nodes, 0, 8,
+            learningRate = 1e-3,
+            initialMomentum = 1e-3,
+            reverseMomentum = 1e-6
+        ).use {
             it.waitForTermination()
         }
 
@@ -182,7 +205,10 @@ internal class NonBlockingLongDijkstraSchedulerTest {
             nodes = nodesList,
             startIndex = from,
             poolSize = 4,
-            pStealInitialPower = 4
+            pStealInitialPower = 4,
+            learningRate = 1e-3,
+            initialMomentum = 1e-3,
+            reverseMomentum = 1e-6
         ).use { scheduler ->
             scheduler.waitForTermination()
             scheduler

@@ -28,10 +28,15 @@ open class AdaptiveDijkstraSchedulerBenchmark {
             poolSize = config.threads,
             stealSizeInitialPower = config.stealSize,
             pStealInitialPower = config.pStealInitialPower,
-            startMetricsUpdateIterations = config.startMetricsUpdateIterations,
-            restMetricsUpdateIterations = config.restMetricsUpdateIterations,
-            metricsChangeStepsCount = config.metricsChangeStepsCount,
-            metricsChangeConsiderableDelta = 0.0,
+            learningRate = config.learningRate,
+            initialMomentum = config.initialMomentum,
+            reverseMomentum = config.reverseMomentum,
+            k1 = config.k1,
+            k2 = config.k2,
+//            startMetricsUpdateIterations = config.startMetricsUpdateIterations,
+//            restMetricsUpdateIterations = config.restMetricsUpdateIterations,
+//            metricsChangeStepsCount = config.metricsChangeStepsCount,
+//            metricsChangeConsiderableDelta = 0.0,
 //            stealSizeTasksCheckCount = config.stealSizeTasksCheckCount
         ).use { scheduler ->
             scheduler.waitForTermination()
@@ -44,18 +49,23 @@ open class AdaptiveDijkstraSchedulerBenchmark {
                 graphName = config.sourcePath,
                 pSteal = 1.0 / 1.shl(config.pStealInitialPower),
                 stealSize = config.stealSize,
-                pStealDegrees = scheduler.pStealPower(),
-                pStealUpdateCount = scheduler.parametersUpdateCount(),
-                totalTasksProcessed = scheduler.totalTasksProcessed(),
-                minPSteal = scheduler.minPSteal(),
-                maxPSteal = scheduler.maxPSteal(),
-                pStealUpdateCountAfter = scheduler.parametersUpdateCountAfterSwitch(),
-                pStealUpdateCountBefore = scheduler.parametersUpdateCountBeforeSwitch(),
-                pStealPowerOnBias = scheduler.pStealPowerOnBias(),
-                maxPStealAfter = scheduler.maxPStealAfterSwitch(),
-                minPStealAfter = scheduler.minPStealAfterSwitch(),
-                maxPStealBefore = scheduler.maxPStealBeforeSwitch(),
-                minPStealBefore = scheduler.minPStealBeforeSwitch(),
+                learningRate = config.learningRate,
+                initialMomentum = config.initialMomentum,
+                reverseMomentum = config.reverseMomentum,
+                k1 = config.k1,
+                k2 = config.k2,
+//                pStealDegrees = scheduler.pStealPower(),
+//                pStealUpdateCount = scheduler.parametersUpdateCount(),
+//                totalTasksProcessed = scheduler.totalTasksProcessed(),
+//                minPSteal = scheduler.minPSteal(),
+//                maxPSteal = scheduler.maxPSteal(),
+//                pStealUpdateCountAfter = scheduler.parametersUpdateCountAfterSwitch(),
+//                pStealUpdateCountBefore = scheduler.parametersUpdateCountBeforeSwitch(),
+//                pStealPowerOnBias = scheduler.pStealPowerOnBias(),
+//                maxPStealAfter = scheduler.maxPStealAfterSwitch(),
+//                minPStealAfter = scheduler.minPStealAfterSwitch(),
+//                maxPStealBefore = scheduler.maxPStealBeforeSwitch(),
+//                minPStealBefore = scheduler.minPStealBeforeSwitch(),
             ),
         )
     }
@@ -81,15 +91,15 @@ open class AdaptiveDijkstraSchedulerBenchmark {
         var pStealInitialPower: Int = 5
 
         @Param(
-            "0", // ""1",
+//            "0", // ""1",
 //            "1", // //            "2",
             "2", // "4",
 //            "3", // //            "8",
-            "4", // "16",
+//            "4", // "16",
 //            "5", // "32",
-            "6", // //            "64",
+//            "6", // //            "64",
 //            "7", // "128",
-            "8", // //            "256",
+//            "8", // //            "256",
 //            "9",
 //            "10" // //            "1024"
         )
@@ -104,31 +114,57 @@ open class AdaptiveDijkstraSchedulerBenchmark {
         lateinit var sourcePath: String
 
         @Param(
-            "100",
-            "1000"
+//            "0.6" // mq
+//            "0.7", // mq2
+//            "0.8", // mq3
+//            "0.9", // mq4
+            "0.95", // mq5
         )
-        var startMetricsUpdateIterations: Int = 100
+        var k1: Double = 0.6
 
         @Param(
-            "1000",
-            "5000",
-            "10000",
+//            "0.06",
+            "0.1",
+            "0.2",
+//            "0.25",
+            "0.3",
+//            "0.35",
+            "0.4",
+//            "0.5"
         )
-        var restMetricsUpdateIterations: Int = 100
+        var k2: Double = 0.06
 
         @Param(
-            "10",
-            "100",
+            "1.0",
+            "0.1",
+            "0.01",
+            "0.001",
+//            "0.0001",
+//            "0.00001",
+//            "0.000001"
         )
-        var metricsChangeStepsCount: Int = 10
+        var learningRate: Double = 1.0
 
+        @Param(
+            "0.1",
+            "0.01",
+            "0.001",
+            "0.0001",
+//            "0.00001"
+        )
+        var reverseMomentum: Double = 1.0
 
-//        @Param(
-//            "100",
-//            "500",
-//            "1000"
-//        )
-//        var stealSizeTasksCheckCount: Int = 10
+        @Param(
+//            "1000.0",
+            "100.0",
+            "10.0",
+            "1.0",
+//            "0.1",
+//            "0.01",
+//            "0.001"
+        )
+        var initialMomentum: Double = 1.0
+
 
         lateinit var nodes: List<IntNode>
 
@@ -148,47 +184,52 @@ open class AdaptiveDijkstraSchedulerBenchmark {
             val results = readyResultsDijkstra
             val config = results.last()
 
-            val pStealTotal = results.flatMap { it.pStealDegrees }
-            val minPSteal = results.flatMap { it.minPSteal }
-            val maxPSteal = results.flatMap { it.maxPSteal }
+//            val pStealTotal = results.flatMap { it.pStealDegrees }
+//            val minPSteal = results.flatMap { it.minPSteal }
+//            val maxPSteal = results.flatMap { it.maxPSteal }
 
-            val pStealAvg = pStealTotal.average()
-            val pStealMean = pStealTotal.mean()
-            val pStealDispersion = pStealTotal.dispersion()
-
-            val minPStealAvg = minPSteal.average()
-            val minPStealMean = minPSteal.mean()
-            val minPStealDispersion = minPSteal.dispersion()
-
-            val maxPStealAvg = maxPSteal.average()
-            val maxPStealMean = maxPSteal.mean()
-            val maxPStealDispersion = maxPSteal.dispersion()
+//            val pStealAvg = pStealTotal.average()
+//            val pStealMean = pStealTotal.mean()
+//            val pStealDispersion = pStealTotal.dispersion()
+//
+//            val minPStealAvg = minPSteal.average()
+//            val minPStealMean = minPSteal.mean()
+//            val minPStealDispersion = minPSteal.dispersion()
+//
+//            val maxPStealAvg = maxPSteal.average()
+//            val maxPStealMean = maxPSteal.mean()
+//            val maxPStealDispersion = maxPSteal.dispersion()
 
             val resultMap = mapOf(
                 "testName" to config.testName,
                 "pSteal" to config.pSteal,
                 "graphName" to config.graphName,
                 "stealSize" to config.stealSize,
-                "startMetricsUpdateIterations" to startMetricsUpdateIterations,
-                "restMetricsUpdateIterations" to restMetricsUpdateIterations,
-                "metricsChangeStepsCount" to metricsChangeStepsCount,
-                "pStealAvg" to pStealAvg,
-                "pStealMean" to pStealMean,
-                "pStealDispersion" to pStealDispersion,
-                "total" to config.totalTasksProcessed,
-                "minPStealAvg" to minPStealAvg,
-                "minPStealMean" to minPStealMean,
-                "minPStealDispersion" to minPStealDispersion,
-                "maxPStealAvg" to maxPStealAvg,
-                "maxPStealMean" to maxPStealMean,
-                "maxPStealDispersion" to maxPStealDispersion,
-                "pStealUpdatesBefore" to config.pStealUpdateCountBefore,
-                "pStealUpdatesAfter" to config.pStealUpdateCountAfter,
-                "pStealPowerOnBias" to config.pStealPowerOnBias,
-                "minPStealBefore" to config.minPStealBefore,
-                "maxPStealBefore" to config.maxPStealBefore,
-                "minPStealAfter" to config.minPStealAfter,
-                "maxPStealAfter" to config.maxPStealAfter,
+                "k1" to config.k1,
+                "k2" to config.k2,
+                "learningRate" to config.learningRate,
+                "initialMomentum" to config.initialMomentum,
+                "reverseMomentum" to config.reverseMomentum,
+//                "startMetricsUpdateIterations" to startMetricsUpdateIterations,
+//                "restMetricsUpdateIterations" to restMetricsUpdateIterations,
+//                "metricsChangeStepsCount" to metricsChangeStepsCount,
+//                "pStealAvg" to pStealAvg,
+//                "pStealMean" to pStealMean,
+//                "pStealDispersion" to pStealDispersion,
+//                "total" to config.totalTasksProcessed,
+//                "minPStealAvg" to minPStealAvg,
+//                "minPStealMean" to minPStealMean,
+//                "minPStealDispersion" to minPStealDispersion,
+//                "maxPStealAvg" to maxPStealAvg,
+//                "maxPStealMean" to maxPStealMean,
+//                "maxPStealDispersion" to maxPStealDispersion,
+//                "pStealUpdatesBefore" to config.pStealUpdateCountBefore,
+//                "pStealUpdatesAfter" to config.pStealUpdateCountAfter,
+//                "pStealPowerOnBias" to config.pStealPowerOnBias,
+//                "minPStealBefore" to config.minPStealBefore,
+//                "maxPStealBefore" to config.maxPStealBefore,
+//                "minPStealAfter" to config.minPStealAfter,
+//                "maxPStealAfter" to config.maxPStealAfter,
             )
 
             println(objectMapper.writeValueAsString(resultMap))
@@ -227,18 +268,23 @@ open class AdaptiveDijkstraSchedulerBenchmark {
         val graphName: String,
         val pSteal: Double,
         val stealSize: Int,
-        val pStealDegrees: List<Int>,
-        val pStealUpdateCount: List<Int>,
-        val pStealUpdateCountBefore: List<Int>,
-        val pStealUpdateCountAfter: List<Int>,
-        val pStealPowerOnBias: List<Int>,
-        val totalTasksProcessed: List<Int>,
-        val minPSteal: List<Int>,
-        val maxPSteal: List<Int>,
-        val minPStealBefore: List<Int>,
-        val maxPStealBefore: List<Int>,
-        val minPStealAfter: List<Int>,
-        val maxPStealAfter: List<Int>,
+        val k1: Double,
+        val k2: Double,
+        val learningRate: Double,
+        val initialMomentum: Double,
+        val reverseMomentum: Double,
+//        val pStealDegrees: List<Int>,
+//        val pStealUpdateCount: List<Int>,
+//        val pStealUpdateCountBefore: List<Int>,
+//        val pStealUpdateCountAfter: List<Int>,
+//        val pStealPowerOnBias: List<Int>,
+//        val totalTasksProcessed: List<Int>,
+//        val minPSteal: List<Int>,
+//        val maxPSteal: List<Int>,
+//        val minPStealBefore: List<Int>,
+//        val maxPStealBefore: List<Int>,
+//        val minPStealAfter: List<Int>,
+//        val maxPStealAfter: List<Int>,
     )
 
 

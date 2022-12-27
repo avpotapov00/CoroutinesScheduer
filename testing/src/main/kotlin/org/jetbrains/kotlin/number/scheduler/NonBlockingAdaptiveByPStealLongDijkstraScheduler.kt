@@ -14,7 +14,6 @@ import java.util.concurrent.locks.LockSupport
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.pow
 import kotlin.system.exitProcess
 
 class NonBlockingAdaptiveByPStealLongDijkstraScheduler(
@@ -25,10 +24,15 @@ class NonBlockingAdaptiveByPStealLongDijkstraScheduler(
     private val pStealInitialPower: Int = 2,
     // The number of attempts to take a task from one thread
     private val retryCount: Int = 100,
-    private val startMetricsUpdateIterations: Int = 100,
-    private val restMetricsUpdateIterations: Int = 1000,
-    private val metricsChangeStepsCount: Int = 10,
-    private val metricsChangeConsiderableDelta: Double = 0.0
+    private val metricsUpdateIterationsInit: Int = 1000,
+    // АДАПТИВНОСТЬ
+    private val learningRate: Double,
+    private val initialMomentum: Double,
+    private val reverseMomentum: Double,
+    private val minXBound: Double = P_STEAL_MIN_POWER,
+    private val maxXBound: Double = P_STEAL_MAX_POWER,
+    private val k1: Double = 0.94,
+    private val k2: Double = 0.06,
 ) : Closeable {
 
     val globalQueue: AdaptiveGlobalHeapWithStealingBufferLongQueue
@@ -101,7 +105,7 @@ class NonBlockingAdaptiveByPStealLongDijkstraScheduler(
         threads = (0 until poolSize).map { index ->
             Worker(
                 index = index,
-                pStealPowerLocal = pStealInitialPower,
+                pStealPowerLocal = pStealInitialPower.toDouble(),
             )
         }
 
@@ -117,7 +121,7 @@ class NonBlockingAdaptiveByPStealLongDijkstraScheduler(
 
     inner class Worker(
         override val index: Int,
-        var pStealPowerLocal: Int,
+        var pStealPowerLocal: Double,
     ) : IndexedThread() {
 
         private var locked = false
@@ -128,21 +132,17 @@ class NonBlockingAdaptiveByPStealLongDijkstraScheduler(
         // adaptive
         var totalTasksProcessed: Int = 0
         var uselessWork = 0L
-        var parametersUpdateDirection: Direction = Direction.P_STEAL_DECREASE
-        // последняя метрика перед уменьшением (сменой направления), которую мы видели
-        var lastDecreasedMetrics: Double = 0.0
 
-        var prevUsefulWorkMetricsValue = 100.0
         var prevTimestamp: Long = System.nanoTime()
 
         var pStealLocal: Double = calculatePSteal(pStealPowerLocal)
-        var metricsUpdateIterations: Int = startMetricsUpdateIterations
+        var metricsUpdateIterations: Int = metricsUpdateIterationsInit
 
         // statistics
         var parametersUpdateCount: Int = 0
 
-        var minPSteal: Int = pStealPowerLocal
-        var maxPSteal: Int = pStealPowerLocal
+        var minPSteal: Double = pStealPowerLocal
+        var maxPSteal: Double = pStealPowerLocal
 
         var deltaLessThenThresholdCount: Int = 0
         var totalTasksProcessedSum: Long = 0
@@ -150,19 +150,6 @@ class NonBlockingAdaptiveByPStealLongDijkstraScheduler(
 
         var parametersUpdateCountBeforeSwitch: Int = 0
         var parametersUpdateCountAfterSwitch: Int = 0
-
-        var minPStealBeforeSwitch: Int = pStealPowerLocal
-        var maxPStealBeforeSwitch: Int = pStealPowerLocal
-
-        var minPStealAfterSwitch: Int = pStealPowerLocal
-        var maxPStealAfterSwitch: Int = pStealPowerLocal
-
-//            set(value) { // DEBUG
-//                checkCounters(value)
-//                field = value
-//            }
-
-//        private val changeLog: MutableList<String> = mutableListOf(currentMetrics.toString())
 
         override fun run() {
             var attempts = 0
@@ -243,69 +230,9 @@ class NonBlockingAdaptiveByPStealLongDijkstraScheduler(
             P_STEAL_DECREASE ->
         */
         private fun updateParameters(currTimestamp: Long) {
-            val currentMetricsValue = (totalTasksProcessed - uselessWork) / (currTimestamp - prevTimestamp).toDouble()
-            // Если изменение не существенно - пропускаем итерацию
-            if (abs(currentMetricsValue - prevUsefulWorkMetricsValue) < metricsChangeConsiderableDelta) {
-                prevUsefulWorkMetricsValue = currentMetricsValue
-                deltaLessThenThresholdCount++
-                return
-            }
+            val metricsValue = (totalTasksProcessed - uselessWork) / (currTimestamp - prevTimestamp).toDouble()
 
-            when (parametersUpdateDirection) {
-                Direction.P_STEAL_INCREASE -> {
-                    if (pStealPowerLocal <= P_STEAL_MIN_POWER) {
-                        println("ERROR! pStealPowerLocal == P_STEAL_MIN_POWER") //\n${changeLog.joinToString("\n") { it.toString() }}")
-                        myExitProcess(1)
-                    }
-                    if (currentMetricsValue > prevUsefulWorkMetricsValue) {
-                        if (pStealPowerLocal == P_STEAL_MAX_POWER) {
-                            pStealPowerLocal--
-                            parametersUpdateDirection = Direction.P_STEAL_DECREASE
-                        } else {
-                            pStealPowerLocal++
-                            parametersUpdateDirection = Direction.P_STEAL_INCREASE
-                        }
-                    } else { // no left bound check because it can't start from the least stealSize value
-                        pStealPowerLocal--
-                        parametersUpdateDirection = Direction.P_STEAL_DECREASE
-                    }
-                }
-
-                Direction.P_STEAL_DECREASE -> {
-                    if (pStealPowerLocal >= P_STEAL_MAX_POWER) {
-                        println("ERROR! pStealPowerLocal == P_STEAL_MAX_POWER") //\n${changeLog.joinToString("\n") { it.toString() }}")
-                        myExitProcess(1)
-                    }
-                    if (currentMetricsValue > prevUsefulWorkMetricsValue) {
-                        if (pStealPowerLocal == P_STEAL_MIN_POWER) {
-                            pStealPowerLocal++
-                            parametersUpdateDirection = Direction.P_STEAL_INCREASE
-                        } else {
-                            pStealPowerLocal--
-                            parametersUpdateDirection = Direction.P_STEAL_DECREASE
-                        }
-                    } else {
-                        pStealPowerLocal++
-                        parametersUpdateDirection = Direction.P_STEAL_INCREASE
-                    }
-                }
-            }
-            parametersUpdateCount++
-            if (parametersUpdateCount > metricsChangeStepsCount) {
-                parametersUpdateCountAfterSwitch++
-                minPStealAfterSwitch = min(minPStealAfterSwitch, pStealPowerLocal)
-                maxPStealAfterSwitch = max(maxPStealAfterSwitch, pStealPowerLocal)
-            } else {
-                parametersUpdateCountBeforeSwitch++
-                minPStealBeforeSwitch = min(minPStealBeforeSwitch, pStealPowerLocal)
-                maxPStealBeforeSwitch = max(maxPStealBeforeSwitch, pStealPowerLocal)
-            }
-            if (parametersUpdateCount == metricsChangeStepsCount) {
-                metricsUpdateIterations = restMetricsUpdateIterations
-                pStealPowerOnBias = pStealPowerLocal
-            }
-
-            prevUsefulWorkMetricsValue = currentMetricsValue
+            pStealPowerLocal = nextX(pStealPowerLocal, metricsValue)
 
             pStealLocal = calculatePSteal(pStealPowerLocal)
             minPSteal = min(minPSteal, pStealPowerLocal)
@@ -465,6 +392,71 @@ class NonBlockingAdaptiveByPStealLongDijkstraScheduler(
         private fun myExitProcess(status: Int) {
             exitProcess(status)
         }
+
+
+        // АДАПТИВНОСТЬ
+
+        private var justStarted: Boolean = true
+
+        private var momentum: Double = initialMomentum
+
+        private var prevMetricsValue: Double = Double.MAX_VALUE
+        private var prevX: Double = pStealInitialPower.toDouble()
+
+        private fun nextX(currentX: Double, metricsValue: Double): Double {
+            if (justStarted) {
+                justStarted = false
+                prevMetricsValue = metricsValue
+                prevX = currentX
+
+                val nextXValue = nextX(currentX)
+
+                return max(min(maxXBound, nextXValue), minXBound)
+            }
+            recalculateMomentum(metricsValue, currentX)
+
+            val nextXValue = nextX(currentX)
+
+            if (willBeOutOfBounds(nextXValue)) {
+                momentum = if (nextXValue > maxXBound) -reverseMomentum else reverseMomentum
+                prevMetricsValue = metricsValue
+                prevX = currentX
+
+                return nextX(currentX)
+            }
+
+            prevX = currentX
+            prevMetricsValue = metricsValue
+
+            return nextXValue
+        }
+
+        private fun willBeOutOfBounds(nextXValue: Double): Boolean {
+            return nextXValue > maxXBound || nextXValue < minXBound
+        }
+
+        private fun recalculateMomentum(metricsValue: Double, currentX: Double) {
+            val diff = (metricsValue - prevMetricsValue) / (currentX - prevX)
+
+            val newMomentum = k1 * momentum + k2 * diff
+
+            momentum = if (newMomentum.isNaN()) {
+                reverseMomentum
+            } else if (abs(newMomentum) < reverseMomentum) {
+                if (newMomentum > 0) {
+                    reverseMomentum
+                } else {
+                    -reverseMomentum
+                }
+            } else {
+                newMomentum
+            }
+        }
+
+        private fun nextX(currentX: Double): Double {
+            return currentX + learningRate * momentum
+        }
+
     }
 
 
@@ -478,60 +470,20 @@ class NonBlockingAdaptiveByPStealLongDijkstraScheduler(
         return threads.map { it.totalTasksProcessedSum.toInt() }
     }
 
-    fun pStealPower(): List<Int> {
+    fun pStealPower(): List<Double> {
         return threads.map { it.pStealPowerLocal }
     }
 
-    fun minPSteal(): List<Int> {
+    fun minPSteal(): List<Double> {
         return threads.map { it.minPSteal }
     }
 
-    fun maxPSteal(): List<Int> {
+    fun maxPSteal(): List<Double> {
         return threads.map { it.maxPSteal }
-    }
-
-    fun minPStealBeforeSwitch(): List<Int> {
-        return threads.map { it.minPStealBeforeSwitch }
-    }
-
-    fun maxPStealBeforeSwitch(): List<Int> {
-        return threads.map { it.maxPStealBeforeSwitch }
-    }
-
-
-    fun minPStealAfterSwitch(): List<Int> {
-        return threads.map { it.minPStealAfterSwitch }
-    }
-
-    fun maxPStealAfterSwitch(): List<Int> {
-        return threads.map { it.maxPStealAfterSwitch }
     }
 
     fun parametersUpdateCount(): List<Int> {
         return threads.map { it.parametersUpdateCount }
-    }
-
-    fun parametersUpdateCountBeforeSwitch(): List<Int> {
-        return threads.map { it.parametersUpdateCountBeforeSwitch }
-    }
-
-    fun parametersUpdateCountAfterSwitch(): List<Int> {
-        return threads.map { it.parametersUpdateCountAfterSwitch }
-    }
-
-    fun deltaLessThenThresholdCount(): List<Int> {
-        return threads.map { it.deltaLessThenThresholdCount }
-    }
-
-    fun pStealPowerOnBias(): List<Int> {
-        return threads.map { it.pStealPowerOnBias }
-    }
-
-    enum class Direction {
-//        P_STEAL_INCREASE_STOP,
-        P_STEAL_INCREASE,
-//        P_STEAL_DECREASE_STOP,
-        P_STEAL_DECREASE,
     }
 
 }
@@ -549,8 +501,8 @@ private const val WAKE_RETRY_COUNT = 5
 
 //private const val P_STEAL_INCREASE_SETUP = 4
 
-private const val P_STEAL_MAX_POWER = 9
-private const val P_STEAL_MIN_POWER = 0
+private const val P_STEAL_MAX_POWER = 9.0
+private const val P_STEAL_MIN_POWER = 0.0
 
 //private const val STEAL_SIZE_MAX_POWER = 10
 //private const val STEAL_SIZE_MIN_POWER = 0

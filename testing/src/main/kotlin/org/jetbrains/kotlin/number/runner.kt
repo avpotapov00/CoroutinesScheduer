@@ -5,7 +5,6 @@ import org.jetbrains.kotlin.graph.dijkstra.IntNode
 import org.jetbrains.kotlin.graph.dijkstra.clearNodes
 import org.jetbrains.kotlin.number.adaptive.new.AdaptiveDijkstraScheduler
 import org.jetbrains.kotlin.number.scheduler.NonBlockingAdaptiveByPStealLongDijkstraScheduler
-import org.jetbrains.kotlin.number.scheduler.NonBlockingFullAdaptiveLongDijkstraScheduler
 
 fun main() {
     println("Start!")
@@ -22,23 +21,24 @@ fun main() {
     println("Real start!")
 
     repeat(100) { testIndex ->
-        val scheduler = NonBlockingFullAdaptiveLongDijkstraScheduler(
+        val scheduler = NonBlockingAdaptiveByPStealLongDijkstraScheduler(
             graph,
             pStealInitialPower = 1,
             stealSizeInitialPower = 3,
             poolSize = 32,
             startIndex = 0,
-            startMetricsUpdateIterations = 100,
-            restMetricsUpdateIterations = 100,
-            metricsChangeStepsCount = 10,
             retryCount = 10,
-            metricsChangeConsiderableDelta = 0.0,
-            stealSizeTasksCheckCount = 100
+            metricsUpdateIterationsInit = 1000,
+            k1 = 0.7,
+            k2 = 0.1,
+            learningRate = 0.1,
+            reverseMomentum = 1.0E-3,
+            initialMomentum = 0.1
         ).use {
             it.waitForTermination()
             it
         }
-        println("Done: $testIndex, total=${scheduler.totalTasksProcessed()}, pStealUpdateCount=${scheduler.pStealUpdateCount()}, stealSizeUpdateCount=${scheduler.stealSizeUpdateCount()}")
+        println("Done: $testIndex, total=${scheduler.totalTasksProcessed()}, minPSteal=${scheduler.minPSteal()}, maxPSteal=${scheduler.maxPSteal()}")
 
         clearNodes(graph)
     }
