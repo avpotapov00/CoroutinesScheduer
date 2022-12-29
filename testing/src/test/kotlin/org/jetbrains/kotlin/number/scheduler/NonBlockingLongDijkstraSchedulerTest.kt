@@ -62,7 +62,6 @@ internal class NonBlockingLongDijkstraSchedulerTest {
             retryCount = 3,
             learningRate = 1e-3,
             initialMomentum = 1e-3,
-            reverseMomentum = 1e-6
         ).use {
             it.waitForTermination()
         }
@@ -87,7 +86,6 @@ internal class NonBlockingLongDijkstraSchedulerTest {
             nodesList, 0, 4,
             learningRate = 1e-3,
             initialMomentum = 1e-3,
-            reverseMomentum = 1e-6
         ).use { it.waitForTermination() }
 
         assertEquals(0, a.distance)
@@ -108,7 +106,6 @@ internal class NonBlockingLongDijkstraSchedulerTest {
             nodes, 0, 4,
             learningRate = 1e-3,
             initialMomentum = 1e-3,
-            reverseMomentum = 1e-6
         ).use {
             it.waitForTermination()
             it
@@ -132,7 +129,6 @@ internal class NonBlockingLongDijkstraSchedulerTest {
             nodes, 0, 8,
             learningRate = 1e-3,
             initialMomentum = 1e-3,
-            reverseMomentum = 1e-6
         ).use {
             it.waitForTermination()
         }
@@ -208,7 +204,6 @@ internal class NonBlockingLongDijkstraSchedulerTest {
             pStealInitialPower = 4,
             learningRate = 1e-3,
             initialMomentum = 1e-3,
-            reverseMomentum = 1e-6
         ).use { scheduler ->
             scheduler.waitForTermination()
             scheduler

@@ -5,9 +5,6 @@ import org.jetbrains.kotlin.graph.GraphReader
 import org.jetbrains.kotlin.graph.dijkstra.IntNode
 import org.jetbrains.kotlin.graph.dijkstra.clearNodes
 import org.jetbrains.kotlin.number.scheduler.NonBlockingAdaptiveByPStealLongDijkstraScheduler
-import org.jetbrains.kotlin.number.scheduler.NonBlockingFullAdaptiveLongDijkstraScheduler
-import org.jetbrains.kotlin.utils.dispersion
-import org.jetbrains.kotlin.utils.mean
 import org.openjdk.jmh.annotations.*
 import java.util.concurrent.TimeUnit
 
@@ -30,12 +27,11 @@ open class AdaptiveDijkstraSchedulerBenchmark {
             pStealInitialPower = config.pStealInitialPower,
             learningRate = config.learningRate,
             initialMomentum = config.initialMomentum,
-            reverseMomentum = config.reverseMomentum,
             k1 = config.k1,
             k2 = config.k2,
+            metricsUpdateIterations = config.metricsChangeStepsCount,
 //            startMetricsUpdateIterations = config.startMetricsUpdateIterations,
 //            restMetricsUpdateIterations = config.restMetricsUpdateIterations,
-//            metricsChangeStepsCount = config.metricsChangeStepsCount,
 //            metricsChangeConsiderableDelta = 0.0,
 //            stealSizeTasksCheckCount = config.stealSizeTasksCheckCount
         ).use { scheduler ->
@@ -51,7 +47,6 @@ open class AdaptiveDijkstraSchedulerBenchmark {
                 stealSize = config.stealSize,
                 learningRate = config.learningRate,
                 initialMomentum = config.initialMomentum,
-                reverseMomentum = config.reverseMomentum,
                 k1 = config.k1,
                 k2 = config.k2,
 //                pStealDegrees = scheduler.pStealPower(),
@@ -77,6 +72,13 @@ open class AdaptiveDijkstraSchedulerBenchmark {
         var threads: Int = 72
 
         @Param(
+//            "500",
+            "1000",
+//            "2000",
+        )
+        var metricsChangeStepsCount: Int = 500
+
+        @Param(
             "0",  // ""1", // 0
 //            "1",  // "0.5", // 1
             "2",  // "0.25", // 2
@@ -95,7 +97,7 @@ open class AdaptiveDijkstraSchedulerBenchmark {
 //            "1", // //            "2",
             "2", // "4",
 //            "3", // //            "8",
-//            "4", // "16",
+            "4", // "16",
 //            "5", // "32",
 //            "6", // //            "64",
 //            "7", // "128",
@@ -106,19 +108,18 @@ open class AdaptiveDijkstraSchedulerBenchmark {
         var stealSize: Int = 32
 
         @Param(
-//            "/soc-LiveJournal1.txt",
-            "/USA-road-d.W.gr",
+            "/soc-LiveJournal1.txt",
+//            "/USA-road-d.W.gr",
 //            "/USA-road-d.CTR.gr",
 //            "/USA-road-d.USA.gr",
         )
         lateinit var sourcePath: String
 
         @Param(
-//            "0.6" // mq
+//            "0.6", // mq
 //            "0.7", // mq2
-//            "0.8", // mq3
-//            "0.9", // mq4
-            "0.95", // mq5
+//            "0.75", // mq3
+            "0.8", // mq4
         )
         var k1: Double = 0.6
 
@@ -137,28 +138,20 @@ open class AdaptiveDijkstraSchedulerBenchmark {
         @Param(
             "1.0",
             "0.1",
-            "0.01",
-            "0.001",
+//            "0.01",
+//            "0.001",
 //            "0.0001",
 //            "0.00001",
 //            "0.000001"
         )
         var learningRate: Double = 1.0
 
-        @Param(
-            "0.1",
-            "0.01",
-            "0.001",
-            "0.0001",
-//            "0.00001"
-        )
-        var reverseMomentum: Double = 1.0
 
         @Param(
 //            "1000.0",
             "100.0",
             "10.0",
-            "1.0",
+//            "1.0",
 //            "0.1",
 //            "0.01",
 //            "0.001"
@@ -209,7 +202,6 @@ open class AdaptiveDijkstraSchedulerBenchmark {
                 "k2" to config.k2,
                 "learningRate" to config.learningRate,
                 "initialMomentum" to config.initialMomentum,
-                "reverseMomentum" to config.reverseMomentum,
 //                "startMetricsUpdateIterations" to startMetricsUpdateIterations,
 //                "restMetricsUpdateIterations" to restMetricsUpdateIterations,
 //                "metricsChangeStepsCount" to metricsChangeStepsCount,
@@ -272,7 +264,6 @@ open class AdaptiveDijkstraSchedulerBenchmark {
         val k2: Double,
         val learningRate: Double,
         val initialMomentum: Double,
-        val reverseMomentum: Double,
 //        val pStealDegrees: List<Int>,
 //        val pStealUpdateCount: List<Int>,
 //        val pStealUpdateCountBefore: List<Int>,

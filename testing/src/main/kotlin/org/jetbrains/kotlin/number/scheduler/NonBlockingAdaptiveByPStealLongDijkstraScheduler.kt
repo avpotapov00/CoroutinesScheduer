@@ -24,11 +24,10 @@ class NonBlockingAdaptiveByPStealLongDijkstraScheduler(
     private val pStealInitialPower: Int = 2,
     // The number of attempts to take a task from one thread
     private val retryCount: Int = 100,
-    private val metricsUpdateIterationsInit: Int = 1000,
+    private val metricsUpdateIterations: Int = 1000,
     // АДАПТИВНОСТЬ
     private val learningRate: Double,
     private val initialMomentum: Double,
-    private val reverseMomentum: Double,
     private val minXBound: Double = P_STEAL_MIN_POWER,
     private val maxXBound: Double = P_STEAL_MAX_POWER,
     private val k1: Double = 0.94,
@@ -136,7 +135,6 @@ class NonBlockingAdaptiveByPStealLongDijkstraScheduler(
         var prevTimestamp: Long = System.nanoTime()
 
         var pStealLocal: Double = calculatePSteal(pStealPowerLocal)
-        var metricsUpdateIterations: Int = metricsUpdateIterationsInit
 
         // statistics
         var parametersUpdateCount: Int = 0
@@ -403,6 +401,10 @@ class NonBlockingAdaptiveByPStealLongDijkstraScheduler(
         private var prevMetricsValue: Double = Double.MAX_VALUE
         private var prevX: Double = pStealInitialPower.toDouble()
 
+        private val minMomentum: Double = 1e-4
+
+        private val maxReverseStep: Double = 2.0
+
         private fun nextX(currentX: Double, metricsValue: Double): Double {
             if (justStarted) {
                 justStarted = false
@@ -414,15 +416,17 @@ class NonBlockingAdaptiveByPStealLongDijkstraScheduler(
                 return max(min(maxXBound, nextXValue), minXBound)
             }
             recalculateMomentum(metricsValue, currentX)
-
             val nextXValue = nextX(currentX)
 
             if (willBeOutOfBounds(nextXValue)) {
-                momentum = if (nextXValue > maxXBound) -reverseMomentum else reverseMomentum
-                prevMetricsValue = metricsValue
-                prevX = currentX
+                momentum *= -1 * k1
+                justStarted = true
 
-                return nextX(currentX)
+                return if (nextXValue > maxXBound) {
+                    max(maxXBound - maxReverseStep, maxXBound - (nextXValue - maxXBound))
+                } else {
+                    min(minXBound + maxReverseStep, minXBound + (minXBound - nextXValue))
+                }
             }
 
             prevX = currentX
@@ -441,12 +445,12 @@ class NonBlockingAdaptiveByPStealLongDijkstraScheduler(
             val newMomentum = k1 * momentum + k2 * diff
 
             momentum = if (newMomentum.isNaN()) {
-                reverseMomentum
-            } else if (abs(newMomentum) < reverseMomentum) {
+                minMomentum
+            } else if (abs(newMomentum) < minMomentum) {
                 if (newMomentum > 0) {
-                    reverseMomentum
+                    minMomentum
                 } else {
-                    -reverseMomentum
+                    -minMomentum
                 }
             } else {
                 newMomentum
@@ -456,7 +460,6 @@ class NonBlockingAdaptiveByPStealLongDijkstraScheduler(
         private fun nextX(currentX: Double): Double {
             return currentX + learningRate * momentum
         }
-
     }
 
 

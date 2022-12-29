@@ -28,12 +28,11 @@ fun main() {
             poolSize = 32,
             startIndex = 0,
             retryCount = 10,
-            metricsUpdateIterationsInit = 1000,
-            k1 = 0.7,
+            metricsUpdateIterations = 1000,
+            k1 = 0.8,
             k2 = 0.1,
-            learningRate = 0.1,
-            reverseMomentum = 1.0E-3,
-            initialMomentum = 0.1
+            learningRate = 0.01,
+            initialMomentum = 100.0
         ).use {
             it.waitForTermination()
             it
