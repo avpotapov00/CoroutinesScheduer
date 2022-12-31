@@ -28,7 +28,7 @@ open class AdaptiveDijkstraSchedulerBenchmark {
             learningRate = config.learningRate,
             initialMomentum = config.initialMomentum,
             k1 = config.k1,
-            k2 = config.k2,
+            k2 = 1 - config.k1,
             metricsUpdateIterations = config.metricsChangeStepsCount,
 //            startMetricsUpdateIterations = config.startMetricsUpdateIterations,
 //            restMetricsUpdateIterations = config.restMetricsUpdateIterations,
@@ -48,7 +48,6 @@ open class AdaptiveDijkstraSchedulerBenchmark {
                 learningRate = config.learningRate,
                 initialMomentum = config.initialMomentum,
                 k1 = config.k1,
-                k2 = config.k2,
 //                pStealDegrees = scheduler.pStealPower(),
 //                pStealUpdateCount = scheduler.parametersUpdateCount(),
 //                totalTasksProcessed = scheduler.totalTasksProcessed(),
@@ -99,9 +98,9 @@ open class AdaptiveDijkstraSchedulerBenchmark {
 //            "3", // //            "8",
             "4", // "16",
 //            "5", // "32",
-//            "6", // //            "64",
+            "6", // //            "64",
 //            "7", // "128",
-//            "8", // //            "256",
+            "8", // //            "256",
 //            "9",
 //            "10" // //            "1024"
         )
@@ -109,34 +108,24 @@ open class AdaptiveDijkstraSchedulerBenchmark {
 
         @Param(
             "/soc-LiveJournal1.txt",
-//            "/USA-road-d.W.gr",
+            "/USA-road-d.W.gr",
 //            "/USA-road-d.CTR.gr",
 //            "/USA-road-d.USA.gr",
         )
         lateinit var sourcePath: String
 
         @Param(
-//            "0.6", // mq
-//            "0.7", // mq2
+//            "0.7", // mq
+//            "0.72", // mq2
 //            "0.75", // mq3
-            "0.8", // mq4
+//            "0.78", // mq4
+            "0.8", // mq5
         )
-        var k1: Double = 0.6
-
-        @Param(
-//            "0.06",
-            "0.1",
-            "0.2",
-//            "0.25",
-            "0.3",
-//            "0.35",
-            "0.4",
-//            "0.5"
-        )
-        var k2: Double = 0.06
+        var k1: Double = 0.7
 
         @Param(
             "1.0",
+            "0.3",
             "0.1",
 //            "0.01",
 //            "0.001",
@@ -199,7 +188,6 @@ open class AdaptiveDijkstraSchedulerBenchmark {
                 "graphName" to config.graphName,
                 "stealSize" to config.stealSize,
                 "k1" to config.k1,
-                "k2" to config.k2,
                 "learningRate" to config.learningRate,
                 "initialMomentum" to config.initialMomentum,
 //                "startMetricsUpdateIterations" to startMetricsUpdateIterations,
@@ -261,7 +249,6 @@ open class AdaptiveDijkstraSchedulerBenchmark {
         val pSteal: Double,
         val stealSize: Int,
         val k1: Double,
-        val k2: Double,
         val learningRate: Double,
         val initialMomentum: Double,
 //        val pStealDegrees: List<Int>,
