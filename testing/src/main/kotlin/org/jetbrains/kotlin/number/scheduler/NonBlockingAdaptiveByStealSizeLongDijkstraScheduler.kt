@@ -14,13 +14,11 @@ import java.io.Closeable
 import java.util.concurrent.Phaser
 import java.util.concurrent.ThreadLocalRandom
 import java.util.concurrent.locks.LockSupport
-import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.system.exitProcess
 
-
-class NonBlockingFullAdaptiveLongDijkstraScheduler(
+class NonBlockingAdaptiveByStealSizeLongDijkstraScheduler(
     private val nodes: List<IntNode>,
     startIndex: Int,
     val poolSize: Int,
@@ -30,14 +28,7 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
     private val retryCount: Int = 100,
     // АДАПТИВНОСТЬ STEAL_SIZE
     private val stealSizeWindow: Int = 1000,
-    // АДАПТИВНОСТЬ P_STEAL
-    private val pStealWindow: Int = 1000,
-    private val learningRate: Double,
-    private val initialMomentum: Double,
-    private val minXBound: Double = P_STEAL_MIN_POWER,
-    private val maxXBound: Double = P_STEAL_MAX_POWER,
-    private val k1: Double = 0.94,
-    private val k2: Double = 0.06,
+    private val bufferEfficientFactor: Double
 ) : Closeable {
 
     val globalQueue: AdaptiveGlobalHeapWithStealingBufferLongQueue
@@ -126,9 +117,7 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
     }
 
     inner class Worker(
-        override val index: Int,
-        var pStealPowerLocal: Double,
-        var stealSizeLocalPower: Int
+        override val index: Int, pStealPowerLocal: Double, var stealSizeLocalPower: Int
     ) : IndexedThread() {
 
         private var locked = false
@@ -137,41 +126,38 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
         val stealingBuffer: MutableList<Long> = ArrayList(STEAL_SIZE_UPPER_BOUND)
 
         // adaptive pSteal
-        var totalTasksProcessed: Int = 0
-        var uselessWork = 0L
-        var prevTimestamp: Long = System.nanoTime()
-
-        var pStealLocal: Double = calculatePSteal(pStealPowerLocal)
+        val pStealLocal: Double = calculatePSteal(pStealPowerLocal)
 
         // adaptive stealSize
+
         var metricsHolder: StealSizeMetrics = StealSizeMetrics(0, 0, 0, 0)
         var previousStealSizeMetrics: Double = -1.0
-        var stealSizeUpdateDirection: StealSizeDirection = StealSizeDirection.INCREASE
+        var stealSizeUpdateDirection: StealSizeDirection =
+            if (stealSizeLocalPower > (STEAL_SIZE_MAX_POWER + STEAL_SIZE_MIN_POWER) / 2) {
+                StealSizeDirection.DECREASE
+            } else {
+                StealSizeDirection.INCREASE
+            }
         var stolenLastFrom: Int = -1
         var tasksFromBufferBetterThanTop = 0
+
         var localStealSizeEpoch: Int = 0
         var stolenCountSum = 0
 
         // statistics
-        var pStealUpdateCount: Int = 0
         var stealSizeUpdateCount: Int = 0
-        var minPSteal: Double = pStealPowerLocal
-        var maxPSteal: Double = pStealPowerLocal
         var minStealSize: Int = stealSizeLocalPower
         var maxStealSize: Int = stealSizeLocalPower
         var deltaLessThenThresholdCount: Int = 0
         var totalTasksProcessedSum: Long = 0
         var expiredFeedbackReceived: Int = 0
 
+        // effective buffer size metrics
+        var prevAverageBufferSize: Double = 0.0
+
         override fun run() {
             var attempts = 0
             while (!terminated) {
-                if (totalTasksProcessed > pStealWindow) {
-                    val currTimestamp = System.nanoTime()
-                    updatePSteal(currTimestamp)
-                    resetMetricsToZero()
-                }
-
                 // trying to get from local queue
                 if (locked) {
                     finishPhaser.register()
@@ -182,7 +168,6 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
                     attempts = 0
                     if (locked) {
                         locked = false
-                        resetMetricsToZero()
                     }
                     tryUpdate(task.firstFromLong.toInt(), nodes[task.secondFromLong])
                     continue
@@ -199,11 +184,11 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
                 // if it didn't work, we try to remove it from the global queue
                 task = stealAndDeleteFromGlobal()
                 if (task != Long.MIN_VALUE) {
+
                     stolenLastFrom = queues.size
                     if (locked) {
                         finishPhaser.register()
                         locked = false
-                        resetMetricsToZero()
                     }
                     attempts = 0
                     tryUpdate(task.firstFromLong.toInt(), nodes[task.secondFromLong])
@@ -218,11 +203,11 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
                 task = stealAndDeleteFromSelf(index)
 
                 if (task != Long.MIN_VALUE) {
+
                     stolenLastFrom = index
                     if (locked) {
                         finishPhaser.register()
                         locked = false
-                        resetMetricsToZero()
                     }
                     attempts = 0
                     tryUpdate(task.firstFromLong.toInt(), nodes[task.secondFromLong])
@@ -236,27 +221,6 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
             }
         }
 
-        /*
-            P_STEAL_INCREASE ->
-            P_STEAL_DECREASE ->
-        */
-        private fun updatePSteal(currTimestamp: Long) {
-            val metricsValue = (totalTasksProcessed - uselessWork) / (currTimestamp - prevTimestamp).toDouble()
-
-            pStealPowerLocal = nextX(pStealPowerLocal, metricsValue)
-
-            pStealLocal = calculatePSteal(pStealPowerLocal)
-            minPSteal = min(minPSteal, pStealPowerLocal)
-            maxPSteal = max(maxPSteal, pStealPowerLocal)
-            checkPSteal()
-        }
-
-        private fun checkPSteal() {
-            if (pStealPowerLocal < P_STEAL_MIN_POWER || pStealPowerLocal > P_STEAL_MAX_POWER) {
-                println("ERROR! pStealPowerLocal < P_STEAL_MIN_POWER || pStealPowerLocal > P_STEAL_MAX_POWER: $pStealPowerLocal")
-                myExitProcess(1)
-            }
-        }
 
         private fun giveFeedback() {
             val otherThread = threads[stolenLastFrom]
@@ -271,10 +235,7 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
             val newStolenSum = otherStolenSum + stolenCountSum
 
             otherThread.metricsHolder = StealSizeMetrics(
-                epoch = otherEpoch,
-                betterSum = newBetterSum,
-                stolenSum = newStolenSum,
-                count = otherCount + 1
+                epoch = otherEpoch, betterSum = newBetterSum, stolenSum = newStolenSum, count = otherCount + 1
             )
         }
 
@@ -353,7 +314,6 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
                 val stolenTasksDeque = stolenTasks.get()
 
                 stolenLastFrom = otherQueueIndex
-
                 if (stealingBuffer.size == 1) {
                     // if not global queue
                     if (stolenLastFrom != queues.size) {
@@ -370,46 +330,6 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
             }
 
             return Long.MIN_VALUE
-        }
-
-
-        private fun resetMetricsToZero() {
-            //  Удаляем значения метрик
-            totalTasksProcessed = 0
-            uselessWork = 0
-            prevTimestamp = System.nanoTime()
-        }
-
-
-        private fun checkWakeThread() {
-            // if the number of tasks in the local queue is more than the threshold, try to wake up a new thread
-            if (size() > TASKS_COUNT_WAKE_THRESHOLD) {
-                tryWakeThread()
-            }
-        }
-
-        private fun tryWakeThread() {
-            var recentWorker = sleepingBox.value
-
-            // if found a thread in sleeping box, trying to get it, or go further, if someone has taken it earlier
-            while (recentWorker != null) {
-                if (sleepingBox.compareAndSet(recentWorker, null)) {
-                    LockSupport.unpark(recentWorker)
-                    return
-                }
-                recentWorker = sleepingBox.value
-            }
-
-            // Try to get a thread from the array several times
-            for (i in 0 until WAKE_RETRY_COUNT) {
-                val index = ThreadLocalRandom.current().nextInt(0, sleepingArray.size)
-                recentWorker = sleepingArray[index].value
-
-                if (recentWorker != null && sleepingArray[index].compareAndSet(recentWorker, null)) {
-                    LockSupport.unpark(recentWorker)
-                    return
-                }
-            }
         }
 
         private fun tryUpdate(oldValue: Int, cur: IntNode) {
@@ -430,23 +350,18 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
                         val task = nextDist.zip(e.to)
 
                         insert(task)
-                        if (toDist != Int.MAX_VALUE) {
-                            uselessWork++
-                        }
-                        totalTasksProcessed++
                         totalTasksProcessedSum++
                         break
                     }
                 }
             }
-
-            checkWakeThread()
         }
 
         fun insert(task: Long) {
             checkUpdateStealSize()
             queues[index].addLocal(task)
         }
+
 
         private fun checkUpdateStealSize() {
             val currentMetrics = metricsHolder
@@ -457,10 +372,7 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
             if (localStealSizeEpoch > epoch) {
                 expiredFeedbackReceived++
                 metricsHolder = StealSizeMetrics(
-                    epoch = localStealSizeEpoch,
-                    stolenSum = 0,
-                    betterSum = 0,
-                    count = 0
+                    epoch = localStealSizeEpoch, stolenSum = 0, betterSum = 0, count = 0
                 )
                 return
             }
@@ -473,43 +385,29 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
             val better = currentMetrics.betterSum
 
             val newMetrics = better.toDouble() / stolen
-
-            // if calculating for the first time
-            if (previousStealSizeMetrics < 0) {
-                previousStealSizeMetrics = newMetrics
-                metricsHolder = StealSizeMetrics(
-                    epoch = currentMetrics.epoch + 1,
-                    count = 0,
-                    stolenSum = 0,
-                    betterSum = 0
-                )
-                return
-            }
+            val averageBufferSize = queues[index].averageBufferSize()
 
             if (newMetrics >= previousStealSizeMetrics) {
                 when (stealSizeUpdateDirection) {
                     StealSizeDirection.INCREASE -> {
-                        if (stealSizeLocalPower == STEAL_SIZE_MAX_POWER) {
+                        if (stealSizeLocalPower == STEAL_SIZE_MAX_POWER || stealSizeIncreaseIsNotSufficient(
+                                averageBufferSize
+                            )
+                        ) {
                             stealSizeUpdateDirection = StealSizeDirection.DECREASE
                             stealSizeLocalPower--
-                            setNextStealSize(stealSizeLocalPower)
-                            stealSizeUpdateCount++
-                            return
+                        } else {
+                            stealSizeLocalPower++
                         }
-                        stealSizeLocalPower++
-                        setNextStealSize(stealSizeLocalPower)
                     }
 
                     StealSizeDirection.DECREASE -> {
                         if (stealSizeLocalPower == STEAL_SIZE_MIN_POWER) {
                             stealSizeUpdateDirection = StealSizeDirection.INCREASE
                             stealSizeLocalPower++
-                            setNextStealSize(stealSizeLocalPower)
-                            stealSizeUpdateCount++
-                            return
+                        } else {
+                            stealSizeLocalPower--
                         }
-                        stealSizeLocalPower--
-                        setNextStealSize(stealSizeLocalPower)
                     }
                 }
             } else {
@@ -517,25 +415,44 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
                     StealSizeDirection.INCREASE -> {
                         stealSizeUpdateDirection = StealSizeDirection.DECREASE
                         stealSizeLocalPower--
-                        setNextStealSize(stealSizeLocalPower)
                     }
 
                     StealSizeDirection.DECREASE -> {
-                        stealSizeUpdateDirection = StealSizeDirection.INCREASE
-                        stealSizeLocalPower++
-                        setNextStealSize(stealSizeLocalPower)
+                        // Если уменьшили stealSize, но это не повлияло на то, сколько в среднем кладем в буфер - продолжаем его уменьшать
+                        if (stealSizeLocalPower != STEAL_SIZE_MIN_POWER && stealSizeDecreaseIsNotSufficient(
+                                averageBufferSize
+                            )
+                        ) {
+                            stealSizeLocalPower--
+                        } else {
+                            stealSizeUpdateDirection = StealSizeDirection.INCREASE
+                            stealSizeLocalPower++
+                        }
                     }
                 }
             }
-            stealSizeUpdateCount++
 
+            setNextStealSize(stealSizeLocalPower)
+            stealSizeUpdateCount++
             previousStealSizeMetrics = newMetrics
+            prevAverageBufferSize = averageBufferSize
+            resetEffectiveBufferSizeMetrics()
+
             metricsHolder = StealSizeMetrics(
-                epoch = currentMetrics.epoch + 1,
-                count = 0,
-                stolenSum = 0,
-                betterSum = 0
+                epoch = currentMetrics.epoch + 1, count = 0, stolenSum = 0, betterSum = 0
             )
+        }
+
+        private fun stealSizeIncreaseIsNotSufficient(averageBufferSize: Double): Boolean {
+            return (averageBufferSize / prevAverageBufferSize) - 1 < bufferEfficientFactor
+        }
+
+        private fun stealSizeDecreaseIsNotSufficient(averageBufferSize: Double): Boolean {
+            return (prevAverageBufferSize / averageBufferSize) - 1 < bufferEfficientFactor
+        }
+
+        private fun resetEffectiveBufferSizeMetrics() {
+            queues[index].resetAverageBufferSizeMetrics()
         }
 
         private fun setNextStealSize(nextValue: Int) {
@@ -552,76 +469,6 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
         private fun myExitProcess(status: Int) {
             exitProcess(status)
         }
-
-        // АДАПТИВНОСТЬ PSTEAL
-
-        private var justStarted: Boolean = true
-
-        private var momentum: Double = initialMomentum
-
-        private var prevMetricsValue: Double = Double.MAX_VALUE
-        private var prevX: Double = pStealInitialPower.toDouble()
-
-        private val minMomentum: Double = 1e-4
-
-        private val maxReverseStep: Double = 2.0
-
-        private fun nextX(currentX: Double, metricsValue: Double): Double {
-            if (justStarted) {
-                justStarted = false
-                prevMetricsValue = metricsValue
-                prevX = currentX
-
-                val nextXValue = nextX(currentX)
-
-                return max(min(maxXBound, nextXValue), minXBound)
-            }
-            recalculateMomentum(metricsValue, currentX)
-            val nextXValue = nextX(currentX)
-
-            if (willBeOutOfBounds(nextXValue)) {
-                momentum *= -1 * k1
-                justStarted = true
-
-                return if (nextXValue > maxXBound) {
-                    max(maxXBound - maxReverseStep, maxXBound - (nextXValue - maxXBound))
-                } else {
-                    min(minXBound + maxReverseStep, minXBound + (minXBound - nextXValue))
-                }
-            }
-
-            prevX = currentX
-            prevMetricsValue = metricsValue
-
-            return nextXValue
-        }
-
-        private fun willBeOutOfBounds(nextXValue: Double): Boolean {
-            return nextXValue > maxXBound || nextXValue < minXBound
-        }
-
-        private fun recalculateMomentum(metricsValue: Double, currentX: Double) {
-            val diff = (metricsValue - prevMetricsValue) / (currentX - prevX)
-
-            val newMomentum = k1 * momentum + k2 * diff
-
-            momentum = if (newMomentum.isNaN()) {
-                minMomentum
-            } else if (abs(newMomentum) < minMomentum) {
-                if (newMomentum > 0) {
-                    minMomentum
-                } else {
-                    -minMomentum
-                }
-            } else {
-                newMomentum
-            }
-        }
-
-        private fun nextX(currentX: Double): Double {
-            return currentX + learningRate * momentum
-        }
-
     }
 
 
@@ -635,18 +482,6 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
         return threads.map { it.totalTasksProcessedSum.toInt() }
     }
 
-    fun pStealPower(): List<Double> {
-        return threads.map { it.pStealPowerLocal }
-    }
-
-    fun minPSteal(): List<Double> {
-        return threads.map { it.minPSteal }
-    }
-
-    fun maxPSteal(): List<Double> {
-        return threads.map { it.maxPSteal }
-    }
-
     fun minStealSize(): List<Int> {
         return threads.map { it.minStealSize }
     }
@@ -655,12 +490,12 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
         return threads.map { it.maxStealSize }
     }
 
-    fun pStealUpdateCount(): List<Int> {
-        return threads.map { it.pStealUpdateCount }
+    fun stealSizeUpdateCountList(): List<Int> {
+        return threads.map { it.stealSizeUpdateCount }
     }
 
-    fun stealSizeUpdateCount(): List<Int> {
-        return threads.map { it.stealSizeUpdateCount }
+    fun stealSizeUpdateCountAverage(): Double {
+        return threads.map { it.stealSizeUpdateCount }.average()
     }
 
     fun expiredFeedbackReceived(): List<Int> {
@@ -671,17 +506,16 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
         return threads.map { it.deltaLessThenThresholdCount }
     }
 
+    fun tasksFromBufferBetterThanTop(): Long {
+        return threads.sumOf { it.tasksFromBufferBetterThanTop.toLong() }
+    }
 
     enum class StealSizeDirection {
-        INCREASE,
-        DECREASE
+        INCREASE, DECREASE
     }
 
     data class StealSizeMetrics(
-        val epoch: Int,
-        val stolenSum: Int,
-        val betterSum: Int,
-        val count: Int
+        val epoch: Int, val stolenSum: Int, val betterSum: Int, val count: Int
     )
 
 }
@@ -692,9 +526,6 @@ private const val TASKS_COUNT_WAKE_THRESHOLD = 30
 
 // The number of cells that we will look at trying to wake up the thread
 private const val WAKE_RETRY_COUNT = 5
-
-private const val P_STEAL_MAX_POWER = 9.0
-private const val P_STEAL_MIN_POWER = 0.0
 
 private const val STEAL_SIZE_MAX_POWER = 10
 private const val STEAL_SIZE_MIN_POWER = 0

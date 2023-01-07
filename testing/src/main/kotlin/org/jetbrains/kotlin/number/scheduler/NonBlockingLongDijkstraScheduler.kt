@@ -6,11 +6,10 @@ import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.atomicArrayOfNulls
 import org.jetbrains.kotlin.generic.smq.IndexedThread
 import org.jetbrains.kotlin.graph.dijkstra.IntNode
-import org.jetbrains.kotlin.number.adaptive.AdaptiveStealingLongMultiQueue
-import org.jetbrains.kotlin.util.firstFromLong
-import org.jetbrains.kotlin.util.indexedBinarySearch
-import org.jetbrains.kotlin.util.secondFromLong
-import org.jetbrains.kotlin.util.zip
+import org.jetbrains.kotlin.number.adaptive.AdaptiveGlobalHeapWithStealingBufferLongQueue
+import org.jetbrains.kotlin.number.adaptive.AdaptiveHeapWithStealingBufferLongQueue
+import org.jetbrains.kotlin.number.smq.heap.StealingLongQueue
+import org.jetbrains.kotlin.util.*
 import java.io.Closeable
 import java.util.concurrent.Phaser
 import java.util.concurrent.ThreadLocalRandom
@@ -20,11 +19,21 @@ class NonBlockingLongDijkstraScheduler(
     private val nodes: List<IntNode>,
     startIndex: Int,
     val poolSize: Int,
-    val stealSize: Int = 3,
-    val pSteal: Double = 0.04,
+    stealSizeInitialPower: Int = 3,
+    pStealInitialPower: Int = 2,
     // The number of attempts to take a task from one thread
     private val retryCount: Int = 100,
-) : AdaptiveStealingLongMultiQueue(stealSize, pSteal, poolSize), Closeable {
+): Closeable {
+
+    val stealSize = calculateStealSize(stealSizeInitialPower)
+    val pSteal = calculatePSteal(pStealInitialPower)
+
+    val globalQueue = AdaptiveGlobalHeapWithStealingBufferLongQueue(stealSize)
+
+    val queues = Array(poolSize) { AdaptiveHeapWithStealingBufferLongQueue(stealSize) }
+
+    val stolenTasks = ThreadLocal.withInitial { ArrayDeque<Long>(stealSize) }
+
 
     /**
      * End of work flag
@@ -60,14 +69,46 @@ class NonBlockingLongDijkstraScheduler(
         finishPhaser.arriveAndAwaitAdvance()
     }
 
+    // your size + the size of the buffer for theft + the size of the global queue
+    fun size() = queues[currThread()].size + stolenTasks.get().size + globalQueue.size
+
+    fun insertGlobal(task: Long) {
+        globalQueue.add(task)
+    }
+
+    fun stealAndDeleteFromGlobal(): Long {
+        val queueToSteal = globalQueue
+
+        return stealFromExactQueue(queueToSteal)
+    }
+
+    fun stealAndDeleteFromSelf(index: Int): Long {
+        val queueToSteal = queues[index]
+
+        return stealFromExactQueue(queueToSteal);
+    }
+
+    private fun stealFromExactQueue(queueToSteal: StealingLongQueue): Long {
+        val stolen = queueToSteal.steal()
+        if (stolen.isEmpty()) return Long.MIN_VALUE // failed
+        // Return the first task and add the others
+        // to the thread - local buffer of stolen ones
+
+        for (i in 1 until stolen.size) {
+            stolenTasks.get().add(stolen[i])
+        }
+        return stolen[0]
+    }
+
+    fun shouldSteal() = ThreadLocalRandom.current().nextDouble() < pSteal
+
+    fun currThread(): Int = (Thread.currentThread() as IndexedThread).index
+
     inner class Worker(override val index: Int) : IndexedThread() {
 
         private var locked = false
 
         // For stolen sum calc
-        var stolenTotalTimesStats = 0
-        var sumStolenStats = 0
-
         var totalTasksProcessed: Long = 0
         var successStealing: Int = 0
         var tasksLowerThanStolen: Int = 0
@@ -79,18 +120,13 @@ class NonBlockingLongDijkstraScheduler(
 
         // количество раз когда что-то украли
         var stealingTotal = 0
-
+        // суммарное количество украденного без учета вынужденных краж
+        var stolenCountSumWithoutEmpty = 0
         // суммарное количество украденного
-        var stolenCountSum = 0
-
-        // суммарное количество украденного для метрик
         var stolenCountSumOnlyForMetrics = 0
 
         // Section 3
-        var tasksFromBufferBetterThanTop = 0
         var tasksFromBufferBetterThanTopOnlyForMetrics = 0
-
-        var stolenLastFrom: Int = -1
 
         // количество раз, когда буффер был заполнен полностью
         var fullBufferTimesSum = 0
@@ -201,7 +237,6 @@ class NonBlockingLongDijkstraScheduler(
                 val localTop = queues[currThread].getTopLocal()
                 if (localTop == Long.MIN_VALUE) {
                     isGoodSteal = true
-                    tasksFromBufferBetterThanTop++
                     tasksFromBufferBetterThanTopOnlyForMetrics++
 
                     tasksFromBufferBetterOrEqualThanTop++
@@ -213,9 +248,7 @@ class NonBlockingLongDijkstraScheduler(
                     if (taskFirstFromLong <= topFirstFromLong) {
                         isGoodSteal = true
                         if (taskFirstFromLong < topFirstFromLong) {
-                            tasksFromBufferBetterThanTop++
                             tasksFromBufferBetterThanTopOnlyForMetrics++
-
                             tasksFromBufferBetterThanTopWithoutEmpty++
                         }
                         tasksFromBufferBetterOrEqualThanTop++
@@ -288,11 +321,9 @@ class NonBlockingLongDijkstraScheduler(
                 }
 
                 stealingTotal++
-                stolenTotalTimesStats++
 
-                stolenCountSum = stealingBuffer.size
+                if (ourTop != Long.MIN_VALUE) stolenCountSumWithoutEmpty += stealingBuffer.size
                 stolenCountSumOnlyForMetrics += stealingBuffer.size
-                sumStolenStats += stealingBuffer.size
 
                 if (stealingBuffer.isEmpty()) {
                     failedStealing++
@@ -313,7 +344,6 @@ class NonBlockingLongDijkstraScheduler(
                 // Return the first task and add the others
                 // to the thread - local buffer of stolen ones
                 val stolenTasksDeque = stolenTasks.get()
-                stolenLastFrom = otherQueueIndex
 
                 for (i in 1 until stealingBuffer.size) {
                     stolenTasksDeque.add(stealingBuffer[i])
@@ -325,53 +355,6 @@ class NonBlockingLongDijkstraScheduler(
             return Long.MIN_VALUE
         }
 
-        private fun goWait() {
-            var oldThread: Worker?
-
-            do {
-                oldThread = sleepingBox.value
-            } while (!sleepingBox.compareAndSet(oldThread, this))
-
-            do {
-                val index = random.nextInt(0, sleepingArray.size)
-                val cell = sleepingArray[index].value
-            } while (!sleepingArray[index].compareAndSet(cell, oldThread))
-
-            finishPhaser.arriveAndDeregister()
-            LockSupport.park()
-            finishPhaser.register()
-        }
-
-        private fun checkWakeThread() {
-            // if the number of tasks in the local queue is more than the threshold, try to wake up a new thread
-            if (size() > TASKS_COUNT_WAKE_THRESHOLD) {
-                tryWakeThread()
-            }
-        }
-
-        private fun tryWakeThread() {
-            var recentWorker = sleepingBox.value
-
-            // if found a thread in sleeping box, trying to get it, or go further, if someone has taken it earlier
-            while (recentWorker != null) {
-                if (sleepingBox.compareAndSet(recentWorker, null)) {
-                    LockSupport.unpark(recentWorker)
-                    return
-                }
-                recentWorker = sleepingBox.value
-            }
-
-            // Try to get a thread from the array several times
-            for (i in 0 until WAKE_RETRY_COUNT) {
-                val index = ThreadLocalRandom.current().nextInt(0, sleepingArray.size)
-                recentWorker = sleepingArray[index].value
-
-                if (recentWorker != null && sleepingArray[index].compareAndSet(recentWorker, null)) {
-                    LockSupport.unpark(recentWorker)
-                    return
-                }
-            }
-        }
 
         private fun tryUpdate(oldValue: Int, cur: IntNode) {
             if (cur.distance < oldValue) {
@@ -402,8 +385,6 @@ class NonBlockingLongDijkstraScheduler(
                     }
                 }
             }
-
-            checkWakeThread()
         }
 
         fun insert(task: Long) {
@@ -454,6 +435,10 @@ class NonBlockingLongDijkstraScheduler(
 
     fun stolenCountSum(): Long {
         return threads.sumOf { it.stolenCountSumOnlyForMetrics.toLong() }
+    }
+
+    fun stolenCountSumWithoutEmpty(): Long {
+        return threads.sumOf { it.stolenCountSumWithoutEmpty.toLong() }
     }
 
     fun fullBufferTimesSum(): Long {
@@ -527,9 +512,3 @@ class NonBlockingLongDijkstraScheduler(
     fun abortedUpdates(): Long = threads.sumOf { it.abortedUpdates }
 }
 
-
-// The threshold of tasks in the thread queue after which other threads must be woken up
-private const val TASKS_COUNT_WAKE_THRESHOLD = 30
-
-// The number of cells that we will look at trying to wake up the thread
-private const val WAKE_RETRY_COUNT = 5

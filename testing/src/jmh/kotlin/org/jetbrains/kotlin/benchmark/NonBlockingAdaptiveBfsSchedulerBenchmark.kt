@@ -2,9 +2,9 @@
 //
 //import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 //import org.jetbrains.kotlin.graph.GraphReader
-//import org.jetbrains.kotlin.graph.dijkstra.IntNode
-//import org.jetbrains.kotlin.graph.dijkstra.clearNodes
-//import org.jetbrains.kotlin.number.scheduler.NonBlockingFullAdaptiveLongDijkstraScheduler
+//import org.jetbrains.kotlin.graph.dijkstra.BfsIntNode
+//import org.jetbrains.kotlin.graph.dijkstra.clearNodesBfs
+//import org.jetbrains.kotlin.number.scheduler.NonBlockingFullAdaptiveLongBfsScheduler
 //import org.openjdk.jmh.annotations.*
 //import java.util.concurrent.TimeUnit
 //
@@ -15,11 +15,11 @@
 //@Threads(1)
 //@BenchmarkMode(Mode.AverageTime)
 //@OutputTimeUnit(TimeUnit.SECONDS)
-//open class AdaptiveDijkstraSchedulerBenchmark {
+//open class NonBlockingAdaptiveBfsSchedulerBenchmark {
 //
 //    @Benchmark
 //    fun testDijkstra(config: Config) {
-//        val scheduler = NonBlockingFullAdaptiveLongDijkstraScheduler(
+//        val scheduler = NonBlockingFullAdaptiveLongBfsScheduler(
 //            config.nodes,
 //            startIndex = 0,
 //            poolSize = config.threads,
@@ -40,9 +40,9 @@
 //            scheduler
 //        }
 //
-//        addResultAdaptiveDijkstra(
+//        addResultAdaptiveBfs(
 //            AdaptiveBenchmarkResult(
-//                testName = "dijkstra",
+//                testName = "bfs",
 //                graphName = config.sourcePath,
 //                pSteal = 1.0 / 1.shl(config.pStealInitialPower),
 //                stealSize = config.stealSize,
@@ -74,12 +74,16 @@
 //        var threads: Int = 72
 //
 //        @Param(
-//            "/soc-LiveJournal1.txt",
-//            "/USA-road-d.W.gr",
-////            "/USA-road-d.CTR.gr",
-////            "/USA-road-d.USA.gr",
+//            "100",
 //        )
-//        lateinit var sourcePath: String
+//        var stealSizeWindow: Int = 1000
+//
+//        @Param(
+//            "500",
+//            "1000",
+//            "2000",
+//        )
+//        var pStealWindow: Int = 500
 //
 //        @Param(
 //            "0",  // ""1", // 0
@@ -111,32 +115,34 @@
 //        var stealSize: Int = 32
 //
 //        @Param(
-////            "0.7", // mq
+//            "/soc-LiveJournal1.txt",
+////            "/USA-road-d.W.gr",
+////            "/USA-road-d.CTR.gr",
+////            "/USA-road-d.USA.gr",
+//        )
+//        lateinit var sourcePath: String
+//
+//        @Param(
+//            "0.7",
 ////            "0.72", // mq2
-////            "0.75", // mq3
+//            "0.75",
 ////            "0.78", // mq4
-//            "0.8", // mq5
+//            "0.8",
 //        )
 //        var k1: Double = 0.7
 //
 //        @Param(
-//            "10.0",
 //            "1.0",
 //            "0.3",
 //            "0.1",
-////            "0.01",
-////            "0.001",
-////            "0.0001",
-////            "0.00001",
-////            "0.000001"
 //        )
 //        var learningRate: Double = 1.0
 //
 //
 //        @Param(
 ////            "1000.0",
-//            "10.0",
 //            "100.0",
+//            "10.0",
 ////            "1.0",
 ////            "0.1",
 ////            "0.01",
@@ -144,30 +150,18 @@
 //        )
 //        var initialMomentum: Double = 1.0
 //
-//        @Param(
-//            "1000",
-//            "500",
-//            "100",
-//        )
-//        var stealSizeWindow: Int = 1000
 //
-//        @Param(
-//            "500",
-//            "1000",
-//            "2000",
-//        )
-//        var pStealWindow: Int = 500
+//        lateinit var nodes: List<BfsIntNode>
 //
-//        lateinit var nodes: List<IntNode>
 //
 //        @Setup(Level.Trial)
 //        fun setup() {
-//            nodes = GraphReader().readGraphNodesBiDirect(sourcePath)
+//            nodes = GraphReader().readGraphNodesBiDirectBfs(sourcePath)
 //        }
 //
 //        @TearDown(Level.Invocation)
 //        fun clear() {
-//            clearNodes(nodes)
+//            clearNodesBfs(nodes)
 //        }
 //
 //        @TearDown(Level.Trial)
@@ -246,7 +240,7 @@
 //        }
 //
 //        @Synchronized
-//        private fun addResultAdaptiveDijkstra(
+//        private fun addResultAdaptiveBfs(
 //            result: AdaptiveBenchmarkResult
 //        ) {
 //            results.add(result)

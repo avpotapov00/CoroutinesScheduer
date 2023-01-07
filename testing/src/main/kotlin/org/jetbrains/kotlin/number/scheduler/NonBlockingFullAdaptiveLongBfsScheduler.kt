@@ -5,7 +5,7 @@ import kotlinx.atomicfu.AtomicRef
 import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.atomicArrayOfNulls
 import org.jetbrains.kotlin.generic.smq.IndexedThread
-import org.jetbrains.kotlin.graph.dijkstra.IntNode
+import org.jetbrains.kotlin.graph.dijkstra.BfsIntNode
 import org.jetbrains.kotlin.number.adaptive.AdaptiveGlobalHeapWithStealingBufferLongQueue
 import org.jetbrains.kotlin.number.adaptive.AdaptiveHeapWithStealingBufferLongQueue
 import org.jetbrains.kotlin.number.smq.heap.StealingLongQueue
@@ -19,9 +19,12 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.system.exitProcess
 
-
-class NonBlockingFullAdaptiveLongDijkstraScheduler(
-    private val nodes: List<IntNode>,
+/**
+ * @author Потапов Александр
+ * @since 05.01.2023
+ */
+class NonBlockingFullAdaptiveLongBfsScheduler(
+    private val nodes: List<BfsIntNode>,
     startIndex: Int,
     val poolSize: Int,
     stealSizeInitialPower: Int = 3,
@@ -412,22 +415,22 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
             }
         }
 
-        private fun tryUpdate(oldValue: Int, cur: IntNode) {
+        private fun tryUpdate(oldValue: Int, cur: BfsIntNode) {
             if (cur.distance < oldValue) {
                 return
             }
 
             for (e in cur.outgoingEdges) {
 
-                val to = nodes[e.to]
+                val to = nodes[e]
 
-                while (cur.distance + e.weight < to.distance) {
+                while (cur.distance + 1 < to.distance) {
                     val currDist = cur.distance
                     val toDist = to.distance
-                    val nextDist = currDist + e.weight
+                    val nextDist = currDist + 1
 
                     if (toDist > nextDist && to.casDistance(toDist, nextDist)) {
-                        val task = nextDist.zip(e.to)
+                        val task = nextDist.zip(e)
 
                         insert(task)
                         if (toDist != Int.MAX_VALUE) {
@@ -647,14 +650,6 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
         return threads.map { it.maxPSteal }
     }
 
-    fun minStealSize(): List<Int> {
-        return threads.map { it.minStealSize }
-    }
-
-    fun maxStealSize(): List<Int> {
-        return threads.map { it.maxStealSize }
-    }
-
     fun pStealUpdateCount(): List<Int> {
         return threads.map { it.pStealUpdateCount }
     }
@@ -671,6 +666,13 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
         return threads.map { it.deltaLessThenThresholdCount }
     }
 
+    fun minStealSize(): List<Int> {
+        return threads.map { it.minStealSize }
+    }
+
+    fun maxStealSize(): List<Int> {
+        return threads.map { it.maxStealSize }
+    }
 
     enum class StealSizeDirection {
         INCREASE,

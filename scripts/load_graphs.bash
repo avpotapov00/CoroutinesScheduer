@@ -1,0 +1,1 @@
+scp /Users/aleksandrpotapov/Documents/CoroutinesScheduer/graphs/graphs.zip mq:/home/ubuntu/data

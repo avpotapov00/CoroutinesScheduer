@@ -99,7 +99,7 @@ fun main() {
 
             clearNodes(nodes)
 
-            NonBlockingLongDijkstraScheduler(nodes, 0, 2, pSteal = 0.0625, stealSize = 8).use {
+            NonBlockingLongDijkstraScheduler(nodes, 0, 2, pStealInitialPower = 3, stealSizeInitialPower = 3).use {
                 it.waitForTermination()
             }
 

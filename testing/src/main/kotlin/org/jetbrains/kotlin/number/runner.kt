@@ -4,13 +4,14 @@ import org.jetbrains.kotlin.graph.GraphReader
 import org.jetbrains.kotlin.graph.dijkstra.IntNode
 import org.jetbrains.kotlin.graph.dijkstra.clearNodes
 import org.jetbrains.kotlin.number.adaptive.new.AdaptiveDijkstraScheduler
-import org.jetbrains.kotlin.number.scheduler.NonBlockingAdaptiveByPStealLongDijkstraScheduler
+import org.jetbrains.kotlin.number.scheduler.NonBlockingAdaptiveByStealSizeLongDijkstraScheduler
+import org.jetbrains.kotlin.number.scheduler.NonBlockingFullAdaptiveLongDijkstraScheduler
 
 fun main() {
     println("Start!")
 
     val graph =
-        GraphReader().readGraphNodesBiDirectFromFile("/Users/aleksandrpotapov/Documents/CoroutinesScheduer/testing/src/jmh/resources/USA-road-d.W.gr")
+        GraphReader().readGraphNodesBiDirectFromFile("/Users/aleksandrpotapov/Documents/CoroutinesScheduer/graphs/USA-road-d.W.gr")
 
 //    println("Seq start!")
 //    val from = 0
@@ -19,25 +20,23 @@ fun main() {
 //    clearNodes(graph)
 
     println("Real start!")
-
+    // k1=0.7,learningRate=0.3,initialMomentum=100.0,window=1000
     repeat(100) { testIndex ->
-        val scheduler = NonBlockingAdaptiveByPStealLongDijkstraScheduler(
+        val scheduler = NonBlockingAdaptiveByStealSizeLongDijkstraScheduler(
             graph,
-            pStealInitialPower = 1,
-            stealSizeInitialPower = 3,
-            poolSize = 32,
+            pStealInitialPower = 0,
+            stealSizeInitialPower = 0,
+            poolSize = 8,
             startIndex = 0,
             retryCount = 10,
-            metricsUpdateIterations = 1000,
-            k1 = 0.8,
-            k2 = 0.1,
-            learningRate = 0.01,
-            initialMomentum = 100.0
+            stealSizeWindow = 100,
+            bufferEfficientFactor = 0.14
         ).use {
             it.waitForTermination()
             it
         }
-        println("Done: $testIndex, total=${scheduler.totalTasksProcessed()}, minPSteal=${scheduler.minPSteal()}, maxPSteal=${scheduler.maxPSteal()}")
+        println("Done: $testIndex, total=${scheduler.totalTasksProcessed()}, " +
+                "minStealSize=${scheduler.minStealSize()}, maxStealSize=${scheduler.maxStealSize()}, stealSizeUpdates=${scheduler.stealSizeUpdateCountAverage()}")
 
         clearNodes(graph)
     }

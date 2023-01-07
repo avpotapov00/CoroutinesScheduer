@@ -186,6 +186,10 @@ class AdaptiveHeapWithStealingBufferLongQueue(
         state.value = ((state.value and reverseBit) + 1) and reverseBit
     }
 
+    var bufferSizeSum: Int = 0
+
+    var bufferFilledCount: Int = 0
+
     private fun fillBuffer() { // stolen = true
         // Если у нас самих недостаточно элементов, то не заполняем буффер
         if (stealSize != nextStealSize) {
@@ -209,6 +213,15 @@ class AdaptiveHeapWithStealingBufferLongQueue(
         filledTimes++
 
         state.value = ((state.value and reverseBit) + 1) and reverseBit
+        bufferSizeSum += fillingSize
+        bufferFilledCount++
+    }
+
+    fun averageBufferSize(): Double = bufferSizeSum / bufferFilledCount.toDouble()
+
+    fun resetAverageBufferSizeMetrics() {
+        bufferSizeSum = 0
+        bufferFilledCount = 0
     }
 
     private fun fillBufferBase() { // stolen = true
