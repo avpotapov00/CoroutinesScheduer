@@ -143,6 +143,7 @@ class NonBlockingAdaptiveByStealSizeLongDijkstraScheduler(
 
         var localStealSizeEpoch: Int = 0
         var stolenCountSum = 0
+        var prevAverageBufferSize: Double = 0.0
 
         // statistics
         var stealSizeUpdateCount: Int = 0
@@ -151,9 +152,6 @@ class NonBlockingAdaptiveByStealSizeLongDijkstraScheduler(
         var deltaLessThenThresholdCount: Int = 0
         var totalTasksProcessedSum: Long = 0
         var expiredFeedbackReceived: Int = 0
-
-        // effective buffer size metrics
-        var prevAverageBufferSize: Double = 0.0
 
         override fun run() {
             var attempts = 0

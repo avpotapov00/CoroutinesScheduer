@@ -22,21 +22,25 @@ fun main() {
     println("Real start!")
     // k1=0.7,learningRate=0.3,initialMomentum=100.0,window=1000
     repeat(100) { testIndex ->
-        val scheduler = NonBlockingAdaptiveByStealSizeLongDijkstraScheduler(
+        val scheduler = NonBlockingFullAdaptiveLongDijkstraScheduler(
             graph,
-            pStealInitialPower = 0,
-            stealSizeInitialPower = 0,
+            pStealInitialPower = 3,
+            stealSizeInitialPower = 2,
             poolSize = 8,
             startIndex = 0,
             retryCount = 10,
-            stealSizeWindow = 100,
-            bufferEfficientFactor = 0.14
+            stealSizeWindow = 10,
+            bufferEfficientFactor = 0.14,
+            k1 = 0.7,
+            k2 = 0.3,
+            learningRate = 1.0,
+            initialMomentum = 1.0
         ).use {
             it.waitForTermination()
             it
         }
         println("Done: $testIndex, total=${scheduler.totalTasksProcessed()}, " +
-                "minStealSize=${scheduler.minStealSize()}, maxStealSize=${scheduler.maxStealSize()}, stealSizeUpdates=${scheduler.stealSizeUpdateCountAverage()}")
+                "minStealSize=${scheduler.minStealSize()}, maxStealSize=${scheduler.maxStealSize()}, pStealUpdates=${scheduler.pStealUpdateCountAvg()}, stealSizeUpdates=${scheduler.stealSizeUpdateCountAvg()}")
 
         clearNodes(graph)
     }

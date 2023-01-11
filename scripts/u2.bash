@@ -1,0 +1,1 @@
+scp /Users/aleksandrpotapov/Documents/CoroutinesScheduer/testing/build/libs/testing-54.2-SNAPSHOT-jmh.jar mq2:/home/ubuntu/exp
