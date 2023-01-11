@@ -14,7 +14,11 @@ import java.io.Closeable
 import java.util.concurrent.Phaser
 import java.util.concurrent.ThreadLocalRandom
 import java.util.concurrent.locks.LockSupport
+import kotlin.system.exitProcess
 
+/**
+ * Plain scheduler version without adaptivity
+ */
 class NonBlockingLongDijkstraScheduler(
     private val nodes: List<IntNode>,
     startIndex: Int,
@@ -23,7 +27,7 @@ class NonBlockingLongDijkstraScheduler(
     pStealInitialPower: Int = 2,
     // The number of attempts to take a task from one thread
     private val retryCount: Int = 100,
-): Closeable {
+) : Closeable {
 
     val stealSize = calculateStealSize(stealSizeInitialPower)
     val pSteal = calculatePSteal(pStealInitialPower)
@@ -32,8 +36,7 @@ class NonBlockingLongDijkstraScheduler(
 
     val queues = Array(poolSize) { AdaptiveHeapWithStealingBufferLongQueue(stealSize) }
 
-    val stolenTasks = ThreadLocal.withInitial { ArrayDeque<Long>(stealSize) }
-
+    val stolenTasks: ThreadLocal<ArrayDeque<Long>> = ThreadLocal.withInitial { ArrayDeque<Long>(stealSize) }
 
     /**
      * End of work flag
@@ -45,16 +48,6 @@ class NonBlockingLongDijkstraScheduler(
      * Threads serving the scheduler
      */
     var threads: List<Worker> = (0 until poolSize).map { index -> Worker(index) }
-
-    /**
-     * Buffer for the freshest sleeping stream
-     */
-    private val sleepingBox: AtomicRef<Worker?> = atomic(null)
-
-    /**
-     * Array where sleeping threads are stored
-     */
-    private val sleepingArray: AtomicArray<Worker?> = atomicArrayOfNulls(poolSize * 2)
 
     val finishPhaser = Phaser(poolSize + 1)
 
@@ -120,8 +113,10 @@ class NonBlockingLongDijkstraScheduler(
 
         // количество раз когда что-то украли
         var stealingTotal = 0
+
         // суммарное количество украденного без учета вынужденных краж
         var stolenCountSumWithoutEmpty = 0
+
         // суммарное количество украденного
         var stolenCountSumOnlyForMetrics = 0
 
@@ -160,6 +155,8 @@ class NonBlockingLongDijkstraScheduler(
         var abortedUpdates = 0L
 
         override fun run() {
+            doJustToStart()
+
             var attempts = 0
             while (!terminated) {
 
@@ -222,6 +219,18 @@ class NonBlockingLongDijkstraScheduler(
                 }
                 locked = true
             }
+        }
+
+        private fun doJustToStart() {
+            if (index != 0) return
+
+            val task = stealAndDeleteFromGlobal()
+            if (task == Long.MIN_VALUE) {
+                println("Can't start: no initial task in global queue")
+                exitProcess(1)
+            }
+
+            tryUpdate(task.firstFromLong.toInt(), nodes[task.secondFromLong])
         }
 
         private var lastDeleteFromBuffer = false

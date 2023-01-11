@@ -55,13 +55,11 @@ internal class NonBlockingLongDijkstraSchedulerTest {
             b.value.addEdge(a.index, 1)
         }
 
-        NonBlockingAdaptiveByPStealLongDijkstraScheduler(
+        PlainNonBlockingLongDijkstraScheduler(
             nodesList,
             0,
             1,
             retryCount = 3,
-            learningRate = 1e-3,
-            initialMomentum = 1e-3,
         ).use {
             it.waitForTermination()
         }
@@ -82,10 +80,8 @@ internal class NonBlockingLongDijkstraSchedulerTest {
         b.addEdge(2, 1)
         a.addEdge(2, 4)
 
-        NonBlockingAdaptiveByPStealLongDijkstraScheduler(
+        PlainNonBlockingLongDijkstraScheduler(
             nodesList, 0, 4,
-            learningRate = 1e-3,
-            initialMomentum = 1e-3,
         ).use { it.waitForTermination() }
 
         assertEquals(0, a.distance)
@@ -102,10 +98,8 @@ internal class NonBlockingLongDijkstraSchedulerTest {
 
         clearNodes(nodes)
 
-        NonBlockingAdaptiveByPStealLongDijkstraScheduler(
+        PlainNonBlockingLongDijkstraScheduler(
             nodes, 0, 4,
-            learningRate = 1e-3,
-            initialMomentum = 1e-3,
         ).use {
             it.waitForTermination()
             it
@@ -125,10 +119,8 @@ internal class NonBlockingLongDijkstraSchedulerTest {
 
         clearNodes(nodes)
 
-        NonBlockingAdaptiveByPStealLongDijkstraScheduler(
+        PlainNonBlockingLongDijkstraScheduler(
             nodes, 0, 8,
-            learningRate = 1e-3,
-            initialMomentum = 1e-3,
         ).use {
             it.waitForTermination()
         }
@@ -197,13 +189,11 @@ internal class NonBlockingLongDijkstraSchedulerTest {
         val seqRes = nodesList.map { it.distance }
         clearNodes(nodesList)
 
-        val scheduler = NonBlockingAdaptiveByPStealLongDijkstraScheduler(
+        val scheduler = PlainNonBlockingLongDijkstraScheduler(
             nodes = nodesList,
             startIndex = from,
             poolSize = 4,
             pStealInitialPower = 4,
-            learningRate = 1e-3,
-            initialMomentum = 1e-3,
         ).use { scheduler ->
             scheduler.waitForTermination()
             scheduler

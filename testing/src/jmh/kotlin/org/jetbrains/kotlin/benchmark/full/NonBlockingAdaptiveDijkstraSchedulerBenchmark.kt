@@ -101,36 +101,20 @@ open class AdaptiveDijkstraSchedulerBenchmark {
         var stealSize: Int = 32
 
         @Param(
-//            "0.5",  // mq1
-//            "0.6",  // mq2
-//            "0.7",  // mq3
-//            "0.75", // mq4
             "0.8",  // mq5
         )
         var k1: Double = 0.7
 
         @Param(
-            "1.0",
             "0.1",
-//            "0.01",
-//            "0.001",
-//            "0.0001",
-//            "0.00001",
-//            "0.000001"
         )
-        var learningRate: Double = 1.0
+        var learningRate: Double = 0.1
 
 
         @Param(
-//            "1000.0",
-            "10.0",
             "100.0",
-//            "1.0",
-//            "0.1",
-//            "0.01",
-//            "0.001"
         )
-        var initialMomentum: Double = 1.0
+        var initialMomentum: Double = 100.0
 
         @Param(
             "10",
@@ -138,15 +122,12 @@ open class AdaptiveDijkstraSchedulerBenchmark {
         var stealSizeWindow: Int = 10
 
         @Param(
-            "500",
             "1000",
-            "2000",
         )
-        var pStealWindow: Int = 500
+        var pStealWindow: Int = 1000
 
         @Param(
             "0.14",
-            "0.09",
         )
         var bufferEfficientFactor: Double = 0.14
 

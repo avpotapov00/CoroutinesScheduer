@@ -172,7 +172,10 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
         var expiredFeedbackReceived: Int = 0
 
         override fun run() {
+            doJustToStart()
+
             var attempts = 0
+
             while (!terminated) {
                 if (totalTasksProcessed > pStealWindow) {
                     val currTimestamp = System.nanoTime()
@@ -242,6 +245,16 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
                 }
                 locked = true
             }
+        }
+
+        private fun doJustToStart() {
+            if (index != 0) return
+
+            val task = stealAndDeleteFromGlobal()
+            // Если кто-то уже стартанул работу
+            if (task == Long.MIN_VALUE) return
+
+            tryUpdate(task.firstFromLong.toInt(), nodes[task.secondFromLong])
         }
 
         /*
