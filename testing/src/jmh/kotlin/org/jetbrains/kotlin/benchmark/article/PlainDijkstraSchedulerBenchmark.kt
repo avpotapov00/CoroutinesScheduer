@@ -1,4 +1,4 @@
-package org.jetbrains.kotlin.benchmark.plain
+package org.jetbrains.kotlin.benchmark.article
 
 import org.jetbrains.kotlin.graph.GraphReader
 import org.jetbrains.kotlin.graph.dijkstra.IntNode
@@ -6,7 +6,6 @@ import org.jetbrains.kotlin.graph.dijkstra.clearNodes
 import org.jetbrains.kotlin.number.scheduler.PlainNonBlockingLongDijkstraScheduler
 import org.openjdk.jmh.annotations.*
 import java.util.concurrent.TimeUnit
-
 
 @Warmup(iterations = 1)
 @Measurement(iterations = 3)
@@ -34,7 +33,8 @@ open class PlainDijkstraSchedulerBenchmark  {
     @State(Scope.Thread)
     open class Config {
 
-        var threads: Int = 72
+        @Param("8")
+        var threads: Int = 8
 
         @Param(
             "/home/ubuntu/data/soc-LiveJournal1.txt",
@@ -53,13 +53,13 @@ open class PlainDijkstraSchedulerBenchmark  {
 //            "5",  // "0.03125", // 5
             "6",  // "0.015625", // 6
 //            "7",  // "0.0078125", // 7
-//            "8",  // "0.001953125", // 8
+            "8",  // "0.001953125", // 8
 //            "9",  // "0.0009765625" // 9
         )
-        var pStealInitialPower: Int = 2
+        var pStealInitialPower: Int = 5
 
         @Param(
-//            "0", // ""1",
+            "0", // ""1",
 //            "1", // //            "2",
             "2", // "4",
 //            "3", // //            "8",
@@ -69,9 +69,9 @@ open class PlainDijkstraSchedulerBenchmark  {
 //            "7", // "128",
             "8", // //            "256",
 //            "9",
-//            "10" // //            "1024"
+            "10" // //            "1024"
         )
-        var stealSize: Int = 2
+        var stealSize: Int = 32
 
         lateinit var nodes: List<IntNode>
 

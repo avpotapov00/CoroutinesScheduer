@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "org.example"
-version = "54.6-SNAPSHOT"
+version = "55.3-SNAPSHOT"
 
 repositories {
     mavenCentral()

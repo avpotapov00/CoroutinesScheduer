@@ -1,1 +1,1 @@
-scp /Users/aleksandrpotapov/Documents/CoroutinesScheduer/testing/build/libs/testing-54.5-SNAPSHOT-jmh.jar mq5:/home/ubuntu/exp
+scp /Users/aleksandrpotapov/Documents/CoroutinesScheduer/testing/build/libs/testing-55.3-SNAPSHOT-jmh.jar mq5:/home/ubuntu/exp
