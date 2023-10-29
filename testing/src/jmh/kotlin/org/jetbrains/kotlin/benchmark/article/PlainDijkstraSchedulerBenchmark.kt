@@ -13,7 +13,7 @@ import java.util.concurrent.TimeUnit
 @Threads(1)
 @BenchmarkMode(Mode.AverageTime)
 @OutputTimeUnit(TimeUnit.SECONDS)
-open class PlainDijkstraSchedulerBenchmark  {
+open class PlainDijkstraSchedulerBenchmark {
 
     @Benchmark
     fun testDijkstra(config: Config) {
@@ -33,12 +33,13 @@ open class PlainDijkstraSchedulerBenchmark  {
     @State(Scope.Thread)
     open class Config {
 
-        @Param("8")
+        @Param("2", "4", "8", "16", "32", "64")
         var threads: Int = 8
 
         @Param(
-            "/home/ubuntu/data/soc-LiveJournal1.txt",
-            "/home/ubuntu/data/USA-road-d.W.gr",
+//            "/home/admin/graphs/soc-LiveJournal1.txt",
+//            "/home/admin/graphs/USA-road-d.W.gr",
+            "/home/admin/graphs/USA-road-d.W.gr-net-soc-LiveJournal1-3.txt"
 //            "/USA-road-d.CTR.gr",
 //            "/USA-road-d.USA.gr",
         )

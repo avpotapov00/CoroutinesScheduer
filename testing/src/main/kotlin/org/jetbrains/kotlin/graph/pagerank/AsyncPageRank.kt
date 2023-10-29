@@ -57,7 +57,7 @@ fun pagerankAsyncPush(nodes: List<PageRankIntNode>, dense: Float, epsilon: Float
 }
 
 
-fun pagerankAsync(nodes: List<PageRankIntNode>, dense: Float, epsilon: Float, dispatcher: CoroutineDispatcher) {
+fun pagerankAsync(nodes: List<PageRankIntNode>, dense: Float, epsilon: Float) {
     val initialValue = 1f / nodes.size
     nodes.forEach { it.clear(initialValue) }
 

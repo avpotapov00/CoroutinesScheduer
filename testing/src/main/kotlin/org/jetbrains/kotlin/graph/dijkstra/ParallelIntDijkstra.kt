@@ -47,7 +47,7 @@ class FloatNode(
     fun atomicAdd(value: Float): Float {
         var current: Float
         do {
-          current = _residual.value
+            current = _residual.value
         } while (!_residual.compareAndSet(current, current + value))
 
         return current
@@ -164,9 +164,11 @@ fun shortestPathSequentialLong(nodes: List<IntNode>, start: Int) {
     nodes[start].distance = 0
     val q = PriorityQueue(comparator)
     q.add(nodes[start])
-
+    var index = 0
     while (q.isNotEmpty()) {
-
+        if (index % 50_000 == 0) {
+            println("Done: ${((100.0 * index / nodes.size.toDouble()) * 100).toInt() / 100}%")
+        }
         val cur = q.poll()
         for (e in cur.outgoingEdges) {
 
@@ -176,6 +178,33 @@ fun shortestPathSequentialLong(nodes: List<IntNode>, start: Int) {
                 q.add(nodes[e.to])
             }
         }
+        index++
+    }
+}
+
+
+fun bfsSequentialLong(nodes: List<IntNode>, start: Int) {
+    val comparator = Comparator<IntNode> { o1, o2 -> o1.distance.compareTo(o2.distance) }
+
+    nodes[start].distance = 0
+    val q = PriorityQueue(comparator)
+    q.add(nodes[start])
+    var index = 0
+
+    while (q.isNotEmpty()) {
+        if (index % 50_000 == 0) {
+            println("Done: ${((100.0 * index / nodes.size.toDouble()) * 100).toInt() / 100}%")
+        }
+        val cur = q.poll()
+        for (e in cur.outgoingEdges) {
+
+            if (nodes[e.to].distance > cur.distance + 1) {
+                nodes[e.to].distance = cur.distance + 1
+                q.remove(nodes[e.to])
+                q.add(nodes[e.to])
+            }
+        }
+        index++
     }
 }
 

@@ -29,7 +29,7 @@ open class FullAdaptiveDijkstraSchedulerBenchmark {
             k2 = 1 - config.k1,
             pStealWindow = config.pStealWindow,
             stealSizeWindow = config.stealSizeWindow,
-            bufferEfficientFactor = 0.14
+            bufferEfficientFactor = config.bufferEfficientFactor
         ).use { scheduler ->
             scheduler.waitForTermination()
             scheduler
@@ -40,12 +40,20 @@ open class FullAdaptiveDijkstraSchedulerBenchmark {
     @State(Scope.Thread)
     open class Config {
 
-        @Param("8")
+        @Param(
+            "2",
+            "4",
+            "8",
+            "16",
+            "32",
+            "64"
+        )
         var threads: Int = 8
 
         @Param(
-            "/home/ubuntu/data/soc-LiveJournal1.txt",
-            "/home/ubuntu/data/USA-road-d.W.gr",
+//            "/home/admin/graphs/soc-LiveJournal1.txt",
+//            "/home/admin/graphs/USA-road-d.W.gr",
+            "/home/admin/graphs/USA-road-d.W.gr-net-soc-LiveJournal1-3.txt"
 //            "/USA-road-d.CTR.gr",
 //            "/USA-road-d.USA.gr",
         )
@@ -81,18 +89,18 @@ open class FullAdaptiveDijkstraSchedulerBenchmark {
         var stealSize: Int = 32
 
         @Param(
-            "0.8",  // mq5
+            "0.8"//, "0.75", "0.7", "0.65", "0.5"
         )
         var k1: Double = 0.7
 
         @Param(
-            "0.1",
+            "0.15"//, "0.1", "0.05", "0.001",
         )
         var learningRate: Double = 0.1
 
 
         @Param(
-            "100.0",
+            "100.0"//, "10.0"
         )
         var initialMomentum: Double = 100.0
 

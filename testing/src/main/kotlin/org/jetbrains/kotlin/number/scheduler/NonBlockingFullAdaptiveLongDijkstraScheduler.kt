@@ -88,15 +88,6 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
      */
     var threads: List<Worker>
 
-    /**
-     * Buffer for the freshest sleeping stream
-     */
-    private val sleepingBox: AtomicRef<Worker?> = atomic(null)
-
-    /**
-     * Array where sleeping threads are stored
-     */
-    private val sleepingArray: AtomicArray<Worker?> = atomicArrayOfNulls(poolSize * 2)
 
     val finishPhaser = Phaser(poolSize + 1)
 
@@ -183,7 +174,7 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
                     resetMetricsToZero()
                 }
 
-                // trying to get from local queue
+                // trying to get from the local queue
                 if (locked) {
                     finishPhaser.register()
                 }
@@ -623,18 +614,6 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
         return threads.map { it.totalTasksProcessedSum.toInt() }
     }
 
-    fun pStealPower(): List<Double> {
-        return threads.map { it.pStealPowerLocal }
-    }
-
-    fun minPSteal(): List<Double> {
-        return threads.map { it.minPSteal }
-    }
-
-    fun maxPSteal(): List<Double> {
-        return threads.map { it.maxPSteal }
-    }
-
     fun minStealSize(): List<Int> {
         return threads.map { it.minStealSize }
     }
@@ -643,28 +622,12 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
         return threads.map { it.maxStealSize }
     }
 
-    fun pStealUpdateCount(): List<Int> {
-        return threads.map { it.pStealUpdateCount }
-    }
-
-    fun stealSizeUpdateCount(): List<Int> {
-        return threads.map { it.stealSizeUpdateCount }
-    }
-
     fun pStealUpdateCountAvg(): Double {
         return threads.sumOf { it.pStealUpdateCount } / threads.size.toDouble()
     }
 
     fun stealSizeUpdateCountAvg(): Double {
         return threads.sumOf { it.stealSizeUpdateCount } / threads.size.toDouble()
-    }
-
-    fun expiredFeedbackReceived(): List<Int> {
-        return threads.map { it.expiredFeedbackReceived }
-    }
-
-    fun deltaLessThenThresholdCount(): List<Int> {
-        return threads.map { it.deltaLessThenThresholdCount }
     }
 
 

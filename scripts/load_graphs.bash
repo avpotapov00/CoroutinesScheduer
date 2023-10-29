@@ -1,1 +1,1 @@
-scp /Users/aleksandrpotapov/Documents/CoroutinesScheduer/graphs/USA-road-d.USA.gr.zip mq:/home/ubuntu/data
+scp /Users/aleksandrpotapov/Documents/CoroutinesScheduer/graphs/USA-road-d.USA.gr.zip mq:/home/admin/graphs

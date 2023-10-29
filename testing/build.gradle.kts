@@ -1,11 +1,11 @@
 plugins {
-    kotlin("jvm") version "1.6.0"
-    id("org.jetbrains.kotlin.kapt") version "1.6.0"
+    kotlin("jvm") version "1.9.10"
+    kotlin("kapt") version "1.9.10"
     id("me.champeau.jmh") version "0.6.6"
 }
 
 group = "org.example"
-version = "55.3-SNAPSHOT"
+version = "60.8-SNAPSHOT"
 
 repositories {
     mavenCentral()
@@ -17,7 +17,7 @@ dependencies {
     implementation(project(":scheduler"))
 
     // stdlib
-    implementation("org.jetbrains.kotlin:kotlin-stdlib:1.6.0")
+    implementation("org.jetbrains.kotlin:kotlin-stdlib:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.5.2")
     implementation("org.jetbrains.kotlinx:atomicfu:0.16.3")
 
@@ -35,6 +35,8 @@ dependencies {
     // https://mvnrepository.com/artifact/com.fasterxml.jackson.module/jackson-module-kotlin
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.14.1")
 
+    // https://mvnrepository.com/artifact/org.kynosarges/tektosyne
+    implementation("org.kynosarges:tektosyne:6.2.0")
 }
 
 tasks.test {
@@ -45,11 +47,17 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>() {
     kotlinOptions.jvmTarget = "11"
 }
 
-tasks.withType<Test> {
-    minHeapSize = "512m"
-    maxHeapSize = "1024m"
-    jvmArgs = listOf("-XX:MaxPermSize=512m")
+tasks.withType<JavaCompile> {
+    sourceCompatibility = "11"
+    targetCompatibility = "11"
 }
+
+tasks.withType<Test> {
+    maxHeapSize = "4096m"
+    minHeapSize = "4096m"
+    jvmArgs = listOf("-XX:MaxPermSize=4096m")
+}
+
 
 val jar by tasks.getting(Jar::class) {
     manifest {

@@ -64,8 +64,8 @@
 //        var threads: Int = 72
 //
 //        @Param(
-//            "/home/ubuntu/data/soc-LiveJournal1.txt",
-//            "/home/ubuntu/data/USA-road-d.W.gr",
+//            "/home/admin/graphs/soc-LiveJournal1.txt",
+//            "/home/admin/graphs/USA-road-d.W.gr",
 ////            "/USA-road-d.CTR.gr",
 ////            "/USA-road-d.USA.gr",
 //        )

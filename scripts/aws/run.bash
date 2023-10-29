@@ -1,0 +1,1 @@
+java -jar -Djmh.ignoreLock=true *.jar -o /home/admin/logs/results.txt > /home/admin/logs/out_res.txt
