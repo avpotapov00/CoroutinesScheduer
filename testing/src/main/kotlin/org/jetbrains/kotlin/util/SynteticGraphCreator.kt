@@ -9,7 +9,7 @@ import kotlin.math.max
 import kotlin.math.min
 
 fun main() {
-    checkGraph()
+    createConnectedGraph()
 }
 
 private fun checkGraph() {
@@ -50,7 +50,7 @@ private fun createConnectedGraph() {
 
     val edgeNodeIndex = 5720903
 
-    val sentLength = 100_000
+    val sentLength = 2_000_000
     val nodesCount = roadGraphSize + sentLength * 3 + socialGraphSize
     val edgesCount = roadGraphEdgeSet.size + +sentLength * 4 + 1 + socialEdgeSet.size
 

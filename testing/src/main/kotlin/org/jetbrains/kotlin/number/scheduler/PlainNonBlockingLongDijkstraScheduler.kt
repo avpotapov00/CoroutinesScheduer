@@ -1,5 +1,6 @@
 package org.jetbrains.kotlin.number.scheduler
 
+import kotlinx.atomicfu.atomic
 import org.jetbrains.kotlin.generic.smq.IndexedThread
 import org.jetbrains.kotlin.graph.dijkstra.IntNode
 import org.jetbrains.kotlin.number.adaptive.AdaptiveGlobalHeapWithStealingBufferLongQueue
@@ -15,7 +16,7 @@ import java.util.concurrent.ThreadLocalRandom
  * @since 12.01.2023
  */
 class PlainNonBlockingLongDijkstraScheduler(
-    private val nodes: List<IntNode>,
+    private var nodes: List<IntNode>,
     startIndex: Int,
     val poolSize: Int,
     stealSizeInitialPower: Int = 3,
@@ -36,9 +37,10 @@ class PlainNonBlockingLongDijkstraScheduler(
     /**
      * End of work flag
      */
-    @Volatile
     private var terminated = false
 
+    @Volatile
+    private var epoch: Int = 0
     /**
      * Threads serving the scheduler
      */
@@ -46,7 +48,43 @@ class PlainNonBlockingLongDijkstraScheduler(
 
     val finishPhaser = Phaser(poolSize + 1)
 
+    /*
+  Есть 3 потока
+  ===================================================================================
+  locked1 | locked2 | locked3 | finishCounter | Событие
+  ===================================================================================
+  false   | false   | false   | 3             | +poolSize Исходное состояние
+  -----------------------------------------------------------------------------------
+  false   | false   | false   | 4             | +1 Положили исходную вершину
+  -----------------------------------------------------------------------------------
+  false   | false   | false   | 3             | -1 Извлекли исходную вершину из глобальной очереди `doJustToStart`
+  -----------------------------------------------------------------------------------
+  true    | true    | true    | 0             | -poolSize Обработка закончилась
+  -----------------------------------------------------------------------------------
+  true    | true    | true    | 1             | +1 Положили новую исходную вершину
+  -----------------------------------------------------------------------------------
+  false   | true    | true    | 2             | +1 Первый поток стартанул                           // события
+  -----------------------------------------------------------------------------------
+  false   | true    | true    | 1             | -1 Извлекли исходную вершину из глобальной очереди  // компенсируются
+  -----------------------------------------------------------------------------------
+  false   | false   | false   | 3             | Все потоки в работе
+  -----------------------------------------------------------------------------------
+  true    | true    | true    | 0             | -poolSize Обработка закончилась
+  -----------------------------------------------------------------------------------
+  ...
+  -----------------------------------------------------------------------------------
+
+
+   */
+    /*
+    poolSize - все потоки должны выписаться
+    +1 - для ожидания завершения фазы
+     */
+    val finishCounter = atomic(poolSize)
+
     init {
+        // +1 тк вставляем изначальную вершину
+        finishCounter.addAndGet(1)
         insertGlobal(0.zip(startIndex))
 
         nodes[startIndex].distance = 0
@@ -54,11 +92,23 @@ class PlainNonBlockingLongDijkstraScheduler(
     }
 
     fun waitForTermination() {
-        finishPhaser.arriveAndAwaitAdvance()
+        while (finishCounter.value != 0) {
+            // spin-wait
+        }
     }
 
-    // your size + the size of the buffer for theft + the size of the global queue
-    fun size() = queues[currThread()].size + stolenTasks.get().size + globalQueue.size
+    fun restartWithNextGraph(nextGraph: List<IntNode>, startIndex: Int) {
+        nodes = nextGraph
+        nodes[startIndex].distance = 0
+        val currentEpoch = epoch
+        // +1 вставляем изначальную вершину
+        finishCounter.incrementAndGet()
+        // добавляем в фазер стартовую вершину, он будет deregister во время изъятия из глобальной очереди
+        insertGlobal(0.zip(startIndex))
+        // переключаем эпоху
+        epoch = currentEpoch + 1
+    }
+
 
     fun insertGlobal(task: Long) {
         globalQueue.add(task)
@@ -100,76 +150,74 @@ class PlainNonBlockingLongDijkstraScheduler(
         val stealingBuffer: MutableList<Long> = ArrayList(STEAL_SIZE_UPPER_BOUND)
 
         override fun run() {
-            doJustToStart()
-
-            var attempts = 0
             while (!terminated) {
+                val currentEpoch = epoch
+                doJustToStart()
 
-                // trying to get from local queue
-                if (locked) {
-                    finishPhaser.register()
-                }
-                var task = delete()
+                var attempts = 0
 
-                if (task != Long.MIN_VALUE) {
-                    attempts = 0
-                    if (locked) {
-                        locked = false
+                while (currentEpoch == epoch) {
+                    // идем удалять задачу из своей очереди
+                    // если мы locked - то внутри обработаем этот кейс и сделаем finishCounter.incrementAndGet()
+                    var task = delete()
+
+                    if (task != Long.MIN_VALUE) {
+                        attempts = 0
+                        if (locked) {
+                            locked = false
+                        }
+                        tryUpdate(task.firstFromLong.toInt(), nodes[task.secondFromLong])
+                        continue
                     }
-                    tryUpdate(task.firstFromLong.toInt(), nodes[task.secondFromLong])
-                    continue
-                }
-                if (locked) {
-                    finishPhaser.arriveAndDeregister()
-                }
 
-                if (attempts < retryCount) {
-                    attempts++
-                    continue
-                }
-
-                // if it didn't work, we try to remove it from the global queue
-                task = stealAndDeleteFromGlobal()
-                if (task != Long.MIN_VALUE) {
-                    if (locked) {
-                        finishPhaser.register()
-                        locked = false
+                    if (attempts < retryCount) {
+                        attempts++
+                        continue
                     }
-                    attempts = 0
-                    tryUpdate(task.firstFromLong.toInt(), nodes[task.secondFromLong])
-                    continue
-                }
 
-                if (locked) {
-                    continue
-                }
-
-                // if it didn't work, we try to remove it from the self queue
-                task = stealAndDeleteFromSelf(index)
-
-                if (task != Long.MIN_VALUE) {
                     if (locked) {
-                        finishPhaser.register()
-                        locked = false
+                        continue
                     }
-                    attempts = 0
-                    tryUpdate(task.firstFromLong.toInt(), nodes[task.secondFromLong])
-                    continue
-                }
 
-                if (!locked) {
-                    finishPhaser.arriveAndDeregister()
+                    // if it didn't work, we try to remove it from the self queue
+                    task = stealAndDeleteFromSelf(index)
+
+                    if (task != Long.MIN_VALUE) {
+                        if (locked) {
+                            println("error")
+                            error("Can't")
+                        }
+                        attempts = 0
+                        tryUpdate(task.firstFromLong.toInt(), nodes[task.secondFromLong])
+                        continue
+                    }
+
+                    if (!locked) {
+                        // -1 тк мы больше не активны
+                        finishCounter.decrementAndGet()
+                        locked = true
+                    }
                 }
-                locked = true
             }
         }
 
         private fun doJustToStart() {
-            if (index != 0) return
+            if (index != 0) {
+                return
+            }
 
             val task = stealAndDeleteFromGlobal()
-            // Если кто-то уже стартанул работу
-            if (task == Long.MIN_VALUE) return
+            if (task == Long.MIN_VALUE) {
+                println("No task in global queue!")
+                error("No task in global queue!")
+            }
+            // +1 первый поток стартанул
+            if (locked) {
+                finishCounter.incrementAndGet()
+                locked = false
+            }
+            // -1 изъяли из глобальной очереди
+            finishCounter.decrementAndGet()
 
             tryUpdate(task.firstFromLong.toInt(), nodes[task.secondFromLong])
         }
@@ -212,20 +260,26 @@ class PlainNonBlockingLongDijkstraScheduler(
             // Choose a random queue and check whether
             // its top task has higher priority
 
-            val otherQueueIndex = ThreadLocalRandom.current().nextInt(0, queues.size + 1)
-            val otherQueue = if (otherQueueIndex == queues.size) globalQueue else queues[otherQueueIndex]
+            val otherQueueIndex = ThreadLocalRandom.current().nextInt(0, queues.size)
+            val otherQueue = queues[otherQueueIndex]
 
             val ourTop = queues[currThread].getTopLocal()
             val otherTop = otherQueue.top
 
             if (otherTop == Long.MIN_VALUE) return Long.MIN_VALUE
             if (ourTop == Long.MIN_VALUE || otherTop.firstFromLong < ourTop.firstFromLong) {
+                // Если мы помечались как уснувшие то только сейчас - когда знаем что там есть что воровать - помечаемся как проснувшиеся
+                if (locked) finishCounter.incrementAndGet()
                 // Try to steal a better task !
                 otherQueue.steal(stealingBuffer)
-
+                // Кто-то нас опередил
                 if (stealingBuffer.isEmpty()) {
+                    // Если у нас не получилось украсть задачу то снова помечаемся как уснувшие
+                    if (locked) {
+                        finishCounter.decrementAndGet()
+                    }
                     return Long.MIN_VALUE
-                } // failed
+                }
 
 
                 // Return the first task and add the others
@@ -277,6 +331,7 @@ class PlainNonBlockingLongDijkstraScheduler(
 
     override fun close() {
         terminated = true
+        epoch++
         threads.forEach { it.interrupt() }
         threads.forEach { it.join() }
     }

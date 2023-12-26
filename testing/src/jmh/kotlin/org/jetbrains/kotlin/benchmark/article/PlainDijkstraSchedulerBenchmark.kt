@@ -15,17 +15,40 @@ import java.util.concurrent.TimeUnit
 @OutputTimeUnit(TimeUnit.SECONDS)
 open class PlainDijkstraSchedulerBenchmark {
 
+//    @Benchmark
+//    fun testDijkstra(config: Config) {
+//        PlainNonBlockingLongDijkstraScheduler(
+//            config.nodes,
+//            startIndex = 0,
+//            poolSize = config.threads,
+//            stealSizeInitialPower = config.stealSize,
+//            pStealInitialPower = config.pStealInitialPower,
+//        ).use { it.waitForTermination() }
+//    }
+
     @Benchmark
     fun testDijkstra(config: Config) {
         PlainNonBlockingLongDijkstraScheduler(
-            config.nodes,
+            config.nodes.first(),
             startIndex = 0,
             poolSize = config.threads,
             stealSizeInitialPower = config.stealSize,
             pStealInitialPower = config.pStealInitialPower,
         ).use { scheduler ->
             scheduler.waitForTermination()
-            scheduler
+            for (i in 1 until config.nodes.size) {
+                val graph = config.nodes[i]
+                scheduler.restartWithNextGraph(graph, 0)
+                scheduler.waitForTermination()
+            }
+
+            repeat(3) {
+                config.nodes.forEach { clearNodes(it) }
+                for (graph in config.nodes) {
+                    scheduler.restartWithNextGraph(graph, 0)
+                    scheduler.waitForTermination()
+                }
+            }
         }
     }
 
@@ -33,16 +56,23 @@ open class PlainDijkstraSchedulerBenchmark {
     @State(Scope.Thread)
     open class Config {
 
-        @Param("2", "4", "8", "16", "32", "64")
+        @Param(
+//            "2",
+//            "4",
+//            "8",
+//            "16",
+//            "32",
+            "64"
+        )
         var threads: Int = 8
 
         @Param(
-//            "/home/admin/graphs/soc-LiveJournal1.txt",
-//            "/home/admin/graphs/USA-road-d.W.gr",
-            "/home/admin/graphs/USA-road-d.W.gr-net-soc-LiveJournal1-3.txt"
+//            "/home/ubuntu/graphs/soc-LiveJournal1.txt",
+//            "/home/ubuntu/graphs/USA-road-d.W.gr",
+//            "/home/ubuntu/graphs/USA-road-d.W.gr-net-soc-LiveJournal1-3.txt"
 //            "/USA-road-d.CTR.gr",
 //            "/USA-road-d.USA.gr",
-        )
+            "/home/ubuntu/graphs/soc-LiveJournal1.txt,/home/ubuntu/graphs/USA-road-d.Full.gr"        )
         lateinit var sourcePath: String
 
         @Param(
@@ -54,8 +84,8 @@ open class PlainDijkstraSchedulerBenchmark {
 //            "5",  // "0.03125", // 5
             "6",  // "0.015625", // 6
 //            "7",  // "0.0078125", // 7
-            "8",  // "0.001953125", // 8
-//            "9",  // "0.0009765625" // 9
+//            "8",  // "0.001953125", // 8
+//            "9",  // "0.000976[5625" // 9
         )
         var pStealInitialPower: Int = 5
 
@@ -74,16 +104,19 @@ open class PlainDijkstraSchedulerBenchmark {
         )
         var stealSize: Int = 32
 
-        lateinit var nodes: List<IntNode>
+        lateinit var nodes: List<List<IntNode>>
+//        lateinit var nodes: List<IntNode>
 
         @Setup(Level.Trial)
         fun setup() {
-            nodes = GraphReader().readGraphNodesBiDirectFromFile(sourcePath)
+            nodes = sourcePath.split(",").map { GraphReader().readGraphNodesBiDirectFromFile(it) }
+//            nodes = GraphReader().readGraphNodesBiDirectFromFile(sourcePath)
         }
 
         @TearDown(Level.Invocation)
         fun clear() {
-            clearNodes(nodes)
+            nodes.forEach { clearNodes(it) }
+//            clearNodes(nodes)
         }
 
     }

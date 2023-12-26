@@ -3,7 +3,7 @@ package org.jetbrains.kotlin.reader
 import java.io.File
 
 fun main() {
-    val dir = File("/Users/Aleksandr.Potapov/Documents/Work/CoroutinesScheduer/out/results")
+    val dir = File("/Users/Aleksandr.Potapov/Documents/Work/CoroutinesScheduer/history/26_12_23_mq1")
     val txtDir = File(dir.absolutePath + "/new_txt/")
     val regex = "\\s+".toRegex()
 
@@ -25,7 +25,8 @@ fun main() {
 
                 var line = reader.readLine()
                 while (line != null && line.isNotEmpty()) {
-                    val values = line.split(regex).filter { it != "?" }
+                    val values = line.split(regex).filter { it != "?" && it != "±" }
+                        .map { if (it.contains(",")) "\"$it\"" else it }
                     check(values.size == columns.size) { "Bad line: $line. Values: $values" }
                     csvValues.add(values)
                     line = reader.readLine()

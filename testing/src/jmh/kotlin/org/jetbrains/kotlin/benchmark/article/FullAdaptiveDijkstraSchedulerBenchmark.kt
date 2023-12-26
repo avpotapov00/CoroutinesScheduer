@@ -15,10 +15,32 @@ import java.util.concurrent.TimeUnit
 @OutputTimeUnit(TimeUnit.SECONDS)
 open class FullAdaptiveDijkstraSchedulerBenchmark {
 
+//    @Benchmark
+//    fun testDijkstra(config: Config) {
+//            NonBlockingFullAdaptiveLongDijkstraScheduler(
+//                config.nodes,
+//                startIndex = 0,
+//                poolSize = config.threads,
+//                stealSizeInitialPower = config.stealSize,
+//                pStealInitialPower = config.pStealInitialPower,
+//                learningRate = config.learningRate,
+//                initialMomentum = config.initialMomentum,
+//                k1 = config.k1,
+//                k2 = 1 - config.k1,
+//                pStealWindow = config.pStealWindow,
+//                stealSizeWindow = config.stealSizeWindow,
+//                bufferEfficientFactor = config.bufferEfficientFactor,
+//                minMomentum = config.minMomentum
+//            ).use { scheduler ->
+//                scheduler.waitForTermination()
+//                scheduler
+//            }
+//    }
+
     @Benchmark
     fun testDijkstra(config: Config) {
         NonBlockingFullAdaptiveLongDijkstraScheduler(
-            config.nodes,
+            config.nodes.first(),
             startIndex = 0,
             poolSize = config.threads,
             stealSizeInitialPower = config.stealSize,
@@ -29,33 +51,54 @@ open class FullAdaptiveDijkstraSchedulerBenchmark {
             k2 = 1 - config.k1,
             pStealWindow = config.pStealWindow,
             stealSizeWindow = config.stealSizeWindow,
-            bufferEfficientFactor = config.bufferEfficientFactor
+            bufferEfficientFactor = config.bufferEfficientFactor,
+            minMomentum = config.minMomentum
         ).use { scheduler ->
             scheduler.waitForTermination()
-            scheduler
+            for (i in 1 until config.nodes.size) {
+                val graph = config.nodes[i]
+                scheduler.restartWithNextGraph(graph, 0)
+                scheduler.waitForTermination()
+            }
+
+            repeat(3) {
+                config.nodes.forEach { clearNodes(it) }
+                for (graph in config.nodes) {
+                    scheduler.restartWithNextGraph(graph, 0)
+                    scheduler.waitForTermination()
+                }
+            }
         }
     }
-
 
     @State(Scope.Thread)
     open class Config {
 
         @Param(
-            "2",
-            "4",
-            "8",
-            "16",
-            "32",
+//            "2",
+//            "4",
+//            "8",
+//            "16",
+//            "32",
             "64"
         )
         var threads: Int = 8
 
         @Param(
-//            "/home/admin/graphs/soc-LiveJournal1.txt",
-//            "/home/admin/graphs/USA-road-d.W.gr",
-            "/home/admin/graphs/USA-road-d.W.gr-net-soc-LiveJournal1-3.txt"
+            "0.0001",
+//            "0.001",
+//            "0.01"
+        )
+        var minMomentum: Double = 1e-4
+
+        @Param(
+//            "/home/ubuntu/graphs/soc-LiveJournal1.txt",
+//            "/home/ubuntu/graphs/USA-road-d.W.gr",
+//            "/home/ubuntu/graphs/USA-road-d.Full.gr",
 //            "/USA-road-d.CTR.gr",
 //            "/USA-road-d.USA.gr",
+//            "/home/ubuntu/graphs/USA-road-d.W.gr,/home/ubuntu/graphs/soc-LiveJournal1.txt,/home/ubuntu/graphs/USA-road-d.W.gr-net-soc-LiveJournal1-3.txt",
+            "/home/ubuntu/graphs/soc-LiveJournal1.txt,/home/ubuntu/graphs/USA-road-d.Full.gr"
         )
         lateinit var sourcePath: String
 
@@ -68,7 +111,7 @@ open class FullAdaptiveDijkstraSchedulerBenchmark {
 //            "5",  // "0.03125", // 5
             "6",  // "0.015625", // 6
 //            "7",  // "0.0078125", // 7
-            "8",  // "0.001953125", // 8
+//            "8",  // "0.001953125", // 8
 //            "9",  // "0.0009765625" // 9
         )
         var pStealInitialPower: Int = 5
@@ -84,51 +127,54 @@ open class FullAdaptiveDijkstraSchedulerBenchmark {
 //            "7", // "128",
             "8", // //            "256",
 //            "9",
-            "10" // //            "1024"
+//            "10" // //            "1024"
         )
         var stealSize: Int = 32
 
         @Param(
-            "0.8"//, "0.75", "0.7", "0.65", "0.5"
+            "0.5", "0.6", "0.7", "0.8", "0.9", "0.95",
         )
         var k1: Double = 0.7
 
         @Param(
-            "0.15"//, "0.1", "0.05", "0.001",
+            "0.05", "0.1", "0.2", "0.3", "0.4"
         )
         var learningRate: Double = 0.1
 
 
         @Param(
-            "100.0"//, "10.0"
+            "50.0"//, "10.0"
         )
         var initialMomentum: Double = 100.0
 
         @Param(
-            "10",
+            "10", //"50", "100"
         )
         var stealSizeWindow: Int = 10
 
         @Param(
-            "1000",
+            "10000"
         )
-        var pStealWindow: Int = 1000
+        var pStealWindow: Int = 1_000
 
         @Param(
             "0.14",
         )
         var bufferEfficientFactor: Double = 0.14
 
-        lateinit var nodes: List<IntNode>
+        lateinit var nodes: List<List<IntNode>>
+//        lateinit var nodes: List<IntNode>
 
         @Setup(Level.Trial)
         fun setup() {
-            nodes = GraphReader().readGraphNodesBiDirectFromFile(sourcePath)
+            nodes = sourcePath.split(",").map { GraphReader().readGraphNodesBiDirectFromFile(it) }
+//            nodes = GraphReader().readGraphNodesBiDirectFromFile(sourcePath)
         }
 
         @TearDown(Level.Invocation)
         fun clear() {
-            clearNodes(nodes)
+            nodes.forEach { clearNodes(it) }
+//            clearNodes(nodes)
         }
     }
 

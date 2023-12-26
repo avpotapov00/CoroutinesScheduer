@@ -1,21 +1,23 @@
-package org.jetbrains.kotlin.number.scheduler
+@file:Suppress("DuplicatedCode")
 
-import kotlinx.atomicfu.atomic
+package org.jetbrains.kotlin.runner
+
 import org.jetbrains.kotlin.generic.smq.IndexedThread
 import org.jetbrains.kotlin.graph.dijkstra.IntNode
 import org.jetbrains.kotlin.number.adaptive.AdaptiveGlobalHeapWithStealingBufferLongQueue
 import org.jetbrains.kotlin.number.adaptive.AdaptiveHeapWithStealingBufferLongQueue
+import org.jetbrains.kotlin.number.scheduler.STEAL_SIZE_UPPER_BOUND
 import org.jetbrains.kotlin.number.smq.heap.StealingLongQueue
 import org.jetbrains.kotlin.util.*
 import java.io.Closeable
+import java.util.concurrent.Phaser
 import java.util.concurrent.ThreadLocalRandom
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.system.exitProcess
 
-
-class NonBlockingFullAdaptiveLongDijkstraScheduler(
+class NonBlockingFullAdaptiveLongDijkstraSchedulerWithMetrics(
     private var nodes: List<IntNode>,
     startIndex: Int,
     val poolSize: Int,
@@ -33,21 +35,15 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
     private val maxXBound: Double = P_STEAL_MAX_POWER,
     private val k1: Double = 0.94,
     private val k2: Double = 0.06,
-    private val bufferEfficientFactor: Double = 0.14,
-    private val minMomentum: Double = 1e-4
+    private val bufferEfficientFactor: Double = 0.14
 ) : Closeable {
 
     val globalQueue: AdaptiveGlobalHeapWithStealingBufferLongQueue
     val queues: Array<AdaptiveHeapWithStealingBufferLongQueue>
     val stolenTasks: ThreadLocal<ArrayDeque<Long>>
 
-    /**
-     * End of work flag
-     */
-    private var terminated = false
-
-    @Volatile
-    private var epoch: Int = 0
+    // your size + the size of the buffer for theft + the size of the global queue
+    fun size() = queues[currThread()].size + stolenTasks.get().size + globalQueue.size
 
     fun insertGlobal(task: Long) {
         globalQueue.add(task)
@@ -80,44 +76,18 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
     fun currThread(): Int = (Thread.currentThread() as IndexedThread).index
 
     /**
+     * End of work flag
+     */
+    @Volatile
+    private var terminated = false
+
+    /**
      * Threads serving the scheduler
      */
     var threads: List<Worker>
 
 
-    /*
-    Есть 3 потока
-    ===================================================================================
-    locked1 | locked2 | locked3 | finishCounter | Событие
-    ===================================================================================
-    false   | false   | false   | 3             | +poolSize Исходное состояние
-    -----------------------------------------------------------------------------------
-    false   | false   | false   | 4             | +1 Положили исходную вершину
-    -----------------------------------------------------------------------------------
-    false   | false   | false   | 3             | -1 Извлекли исходную вершину из глобальной очереди `doJustToStart`
-    -----------------------------------------------------------------------------------
-    true    | true    | true    | 0             | -poolSize Обработка закончилась
-    -----------------------------------------------------------------------------------
-    true    | true    | true    | 1             | +1 Положили новую исходную вершину
-    -----------------------------------------------------------------------------------
-    false   | true    | true    | 2             | +1 Первый поток стартанул                           // события
-    -----------------------------------------------------------------------------------
-    false   | true    | true    | 1             | -1 Извлекли исходную вершину из глобальной очереди  // компенсируются
-    -----------------------------------------------------------------------------------
-    false   | false   | false   | 3             | Все потоки в работе
-    -----------------------------------------------------------------------------------
-    true    | true    | true    | 0             | -poolSize Обработка закончилась
-    -----------------------------------------------------------------------------------
-    ...
-    -----------------------------------------------------------------------------------
-
-
-     */
-    /*
-    poolSize - все потоки должны выписаться
-    +1 - для ожидания завершения фазы
-     */
-    val finishCounter = atomic(poolSize)
+    val finishPhaser = Phaser(poolSize + 1)
 
     init {
         val stealSizeInitialValue = calculateStealSize(stealSizeInitialPower)
@@ -134,8 +104,6 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
             )
         }
 
-        // +1 тк вставляем изначальную вершину
-        finishCounter.addAndGet(1)
         insertGlobal(0.zip(startIndex))
 
         nodes[startIndex].distance = 0
@@ -143,37 +111,48 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
     }
 
     fun waitForTermination() {
-        while (finishCounter.value != 0) {
-            // spin-wait
-        }
+        finishPhaser.arriveAndAwaitAdvance()
     }
 
+    /*
+             "   maxPSteal = ${it.maxPSteal} \n" +
+                        "   minPSteal = ${it.minPSteal} \n" +
+                        "   pStealLocal = ${it.pStealLocal} \n" +
+                        "   pStealPowerLocal = ${it.pStealPowerLocal} \n" +
+                        "   pStealUpdateCount = ${it.pStealUpdateCount} \n" +
+                        "   pStealMomentum = ${it.momentum} \n" +
+                        "   stealSizeLocalPower = ${it.stealSizeLocalPower} \n" +
+                        "   localStealSizeEpoch = ${it.localStealSizeEpoch} \n" +
+                        "   stealSizeUpdateCount = ${it.stealSizeUpdateCount} \n" +
+                        "   maxStealSize = ${it.maxStealSize} \n" +
+                        "   minStealSize = ${it.minStealSize} \n" +
+                        "   metricsHolder = ${it.metricsHolder} \n" +
+                        "   expiredFeedbackReceived = ${it.expiredFeedbackReceived} \n" +
+                        "   totalTasksProcessed = ${it.totalTasksProcessed} \n" +
+                        "   pStealHistory = ${it.pStealHistory.joinToString(", ")} \n" +
+                        "   stealSizeHistory = ${it.stealSizeHistory.joinToString(", ")} \n" +
+                        "   momentumHistory = ${it.momentumHistory.joinToString(", ")} \n"
+     */
     fun restartWithNextGraph(nextGraph: List<IntNode>, startIndex: Int) {
+        threads.forEach {
+            it.maxPSteal = 0.0
+            it.minPSteal = 100.0
+            it.pStealUpdateCount = 0
+            it.stealSizeUpdateCount = 0
+            it.maxStealSize = 0
+            it.minStealSize = 100
+            it.pStealHistory.clear()
+            it.stealSizeHistory.clear()
+            it.momentumHistory.clear()
+        }
         nodes = nextGraph
         nodes[startIndex].distance = 0
-        threads.forEach {
-            // adaptive pSteal
-            it.totalTasksProcessed = 0
-            it.uselessWork = 0L
-            it.prevTimestamp = System.nanoTime()
-            // adaptive stealSize
-            it.metricsHolder = StealSizeMetrics(0, 0, 0, 0)
-            it.previousStealSizeMetrics = -1.0
-            it.stolenLastFrom = -1
-            it.tasksFromBufferBetterThanTop = 0
-            it.localStealSizeEpoch = 0
-            it.stolenCountSum = 0
-            it.prevAverageBufferSize = 0.0
-        }
-        val currentEpoch = epoch
-        // +1 вставляем изначальную вершину
-        finishCounter.incrementAndGet()
-        // добавляем в фазер стартовую вершину, он будет deregister во время изъятия из глобальной очереди
         insertGlobal(0.zip(startIndex))
-        // переключаем эпоху
-        epoch = currentEpoch + 1
+        while (globalQueue.size != 0) {
+            Unit
+        }
+        Unit
     }
-
 
     inner class Worker(
         override val index: Int,
@@ -181,7 +160,7 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
         var stealSizeLocalPower: Int
     ) : IndexedThread() {
 
-        private var locked = false
+        var locked = false
 
         val random: ThreadLocalRandom = ThreadLocalRandom.current()
         val stealingBuffer: MutableList<Long> = ArrayList(STEAL_SIZE_UPPER_BOUND)
@@ -219,84 +198,91 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
         var maxStealSize: Int = stealSizeLocalPower
         var totalTasksProcessedSum: Long = 0
         var expiredFeedbackReceived: Int = 0
+        val pStealHistory = arrayListOf(pStealPowerLocal)
+        val stealSizeHistory = arrayListOf(stealSizeLocalPower)
 
         override fun run() {
+            doJustToStart()
+
+            var attempts = 0
+
             while (!terminated) {
-                val currentEpoch = epoch
-                doJustToStart()
+                if (totalTasksProcessed > pStealWindow) {
+                    val currTimestamp = System.nanoTime()
+                    updatePSteal(currTimestamp)
+                    resetMetricsToZero()
+                }
 
-                var attempts = 0
+                // trying to get from the local queue
+                if (locked) {
+                    finishPhaser.register()
+                }
+                var task = delete()
 
-                while (currentEpoch == epoch) {
-                    if (totalTasksProcessed > pStealWindow) {
-                        val currTimestamp = System.nanoTime()
-                        updatePSteal(currTimestamp)
+                if (task != Long.MIN_VALUE) {
+                    attempts = 0
+                    if (locked) {
+                        locked = false
                         resetMetricsToZero()
                     }
-
-                    // идем удалять задачу из своей очереди
-                    // если мы locked - то внутри обработаем этот кейс и сделаем finishCounter.incrementAndGet()
-                    var task = delete()
-
-                    if (task != Long.MIN_VALUE) {
-                        attempts = 0
-                        if (locked) {
-                            locked = false
-                            resetMetricsToZero()
-                        }
-                        tryUpdate(task.firstFromLong.toInt(), nodes[task.secondFromLong])
-                        continue
-                    }
-
-                    if (attempts < retryCount) {
-                        attempts++
-                        continue
-                    }
-
-                    if (locked) {
-                        continue
-                    }
-
-                    // if it didn't work, we try to remove it from the self queue
-                    task = stealAndDeleteFromSelf(index)
-
-                    if (task != Long.MIN_VALUE) {
-                        stolenLastFrom = index
-                        if (locked) {
-                            println("Impossible state")
-                            error("Can't")
-                        }
-                        attempts = 0
-                        tryUpdate(task.firstFromLong.toInt(), nodes[task.secondFromLong])
-                        continue
-                    }
-
-                    if (!locked) {
-                        // -1 тк мы больше не активны
-                        finishCounter.decrementAndGet()
-                        locked = true
-                    }
+                    tryUpdate(task.firstFromLong.toInt(), nodes[task.secondFromLong])
+                    continue
                 }
+                if (locked) {
+                    finishPhaser.arriveAndDeregister()
+                }
+
+                if (attempts < retryCount) {
+                    attempts++
+                    continue
+                }
+
+                // if it didn't work, we try to remove it from the global queue
+                task = stealAndDeleteFromGlobal()
+                if (task != Long.MIN_VALUE) {
+                    stolenLastFrom = queues.size
+                    if (locked) {
+                        finishPhaser.register()
+                        locked = false
+                        resetMetricsToZero()
+                    }
+                    attempts = 0
+                    tryUpdate(task.firstFromLong.toInt(), nodes[task.secondFromLong])
+                    continue
+                }
+
+                if (locked) {
+                    continue
+                }
+
+                // if it didn't work, we try to remove it from the self queue
+                task = stealAndDeleteFromSelf(index)
+
+                if (task != Long.MIN_VALUE) {
+                    stolenLastFrom = index
+                    if (locked) {
+                        finishPhaser.register()
+                        locked = false
+                        resetMetricsToZero()
+                    }
+                    attempts = 0
+                    tryUpdate(task.firstFromLong.toInt(), nodes[task.secondFromLong])
+                    continue
+                }
+
+                if (!locked) {
+                    finishPhaser.arriveAndDeregister()
+                }
+                locked = true
             }
         }
 
         private fun doJustToStart() {
-            if (index != 0) {
-                return
-            }
+            if (index != 0) return
 
             val task = stealAndDeleteFromGlobal()
-            if (task == Long.MIN_VALUE) {
-                println("No task in global queue!")
-                error("No task in global queue!")
-            }
-            // +1 первый поток стартанул
-            if (locked) {
-                finishCounter.incrementAndGet()
-                locked = false
-            }
-            // -1 изъяли из глобальной очереди
-            finishCounter.decrementAndGet()
+            // Если кто-то уже стартанул работу
+            if (task == Long.MIN_VALUE) return
 
             tryUpdate(task.firstFromLong.toInt(), nodes[task.secondFromLong])
         }
@@ -309,6 +295,7 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
             val metricsValue = (totalTasksProcessed - uselessWork) / (currTimestamp - prevTimestamp).toDouble()
 
             pStealPowerLocal = nextX(pStealPowerLocal, metricsValue)
+            pStealHistory += pStealPowerLocal
 
             pStealLocal = calculatePSteal(pStealPowerLocal)
             minPSteal = min(minPSteal, pStealPowerLocal)
@@ -325,8 +312,6 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
         }
 
         private fun giveFeedback() {
-            // если извлекали из глобальной очереди на старте работы алгоритма
-            if (stolenLastFrom == -1) return
             val otherThread = threads[stolenLastFrom]
             val otherMetrics = otherThread.metricsHolder
 
@@ -350,11 +335,10 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
 
             // Do we have previously stolen tasks ?
             val ourDeque = stolenTasks.get()
-            val otherQueue = queues[currThread]
             if (ourDeque.isNotEmpty()) {
                 lastDeleteFromBuffer = true
                 val task = ourDeque.removeFirst()
-                val localTop = otherQueue.getTopLocal()
+                val localTop = queues[currThread].getTopLocal()
 
                 if (localTop == Long.MIN_VALUE || task.firstFromLong <= localTop.firstFromLong) {
                     tasksFromBufferBetterThanTop++
@@ -381,7 +365,7 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
             }
             // Try to retrieve the top task
             // from the thread - local queue
-            val task = otherQueue.extractTopLocal()
+            val task = queues[currThread].extractTopLocal()
             if (task != Long.MIN_VALUE) {
                 return task
             }
@@ -397,29 +381,21 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
             // Choose a random queue and check whether
             // its top task has higher priority
 
-            val otherQueueIndex = ThreadLocalRandom.current().nextInt(0, queues.size)
-            val otherQueue = queues[otherQueueIndex]
+            val otherQueueIndex = ThreadLocalRandom.current().nextInt(0, queues.size + 1)
+            val otherQueue = if (otherQueueIndex == queues.size) globalQueue else queues[otherQueueIndex]
 
             val ourTop = queues[currThread].getTopLocal()
             val otherTop = otherQueue.top
 
             if (otherTop == Long.MIN_VALUE) return Long.MIN_VALUE
             if (ourTop == Long.MIN_VALUE || otherTop.firstFromLong < ourTop.firstFromLong) {
-                // Если мы помечались как уснувшие то только сейчас - когда знаем что там есть что воровать - помечаемся как проснувшиеся
-                if (locked) {
-                    finishCounter.addAndGet(1)
-                }
                 // Try to steal a better task !
                 otherQueue.steal(stealingBuffer)
                 stolenCountSum = stealingBuffer.size
-                // Кто-то нас опередил
+
                 if (stealingBuffer.isEmpty()) {
-                    // Если у нас не получилось украсть задачу то снова помечаемся как уснувшие
-                    if (locked) {
-                        finishCounter.decrementAndGet()
-                    }
                     return Long.MIN_VALUE
-                }
+                } // failed
 
 
                 // Return the first task and add the others
@@ -429,7 +405,10 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
                 stolenLastFrom = otherQueueIndex
 
                 if (stealingBuffer.size == 1) {
-                    giveFeedback()
+                    // if not global queue
+                    if (stolenLastFrom != queues.size) {
+                        giveFeedback()
+                    }
                     stolenCountSum = 0
                 }
 
@@ -555,6 +534,7 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
                 }
             }
 
+            localStealSizeEpoch = epoch + 1
             setNextStealSize(stealSizeLocalPower)
             stealSizeUpdateCount++
             previousStealSizeMetrics = newMetrics
@@ -562,8 +542,11 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
             resetEffectiveBufferSizeMetrics()
 
             metricsHolder = StealSizeMetrics(
-                epoch = currentMetrics.epoch + 1, count = 0, stolenSum = 0, betterSum = 0
+                epoch = localStealSizeEpoch, count = 0, stolenSum = 0, betterSum = 0
             )
+            // region: metrics
+            stealSizeHistory += stealSizeLocalPower
+            // end region: metrics
         }
 
         private fun stealSizeIncreaseIsNotSufficient(averageBufferSize: Double): Boolean {
@@ -597,10 +580,13 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
 
         private var justStarted: Boolean = true
 
-        private var momentum: Double = initialMomentum
+        var momentum: Double = initialMomentum
+        val momentumHistory = arrayListOf(momentum)
 
         private var prevMetricsValue: Double = Double.MAX_VALUE
         private var prevX: Double = pStealInitialPower.toDouble()
+
+        private val minMomentum: Double = 1e-4
 
         private val maxReverseStep: Double = 2.0
 
@@ -654,6 +640,7 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
             } else {
                 newMomentum
             }
+            momentumHistory.add(newMomentum)
         }
 
         private fun nextX(currentX: Double): Double {
@@ -665,7 +652,6 @@ class NonBlockingFullAdaptiveLongDijkstraScheduler(
 
     override fun close() {
         terminated = true
-        epoch++
         threads.forEach { it.interrupt() }
         threads.forEach { it.join() }
     }

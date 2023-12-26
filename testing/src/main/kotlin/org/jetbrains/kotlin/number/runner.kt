@@ -39,8 +39,7 @@ fun main() {
             it.waitForTermination()
             it
         }
-        println("Done: $testIndex, total=${scheduler.totalTasksProcessed()}, " +
-                "minStealSize=${scheduler.minStealSize()}, maxStealSize=${scheduler.maxStealSize()}, pStealUpdates=${scheduler.pStealUpdateCountAvg()}, stealSizeUpdates=${scheduler.stealSizeUpdateCountAvg()}")
+        println("Done: $testIndex")
 
         clearNodes(graph)
     }
